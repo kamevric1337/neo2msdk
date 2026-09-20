@@ -15,9 +15,14 @@
   → Đã gỡ bỏ (`adb uninstall com.smartremote.djiflydrone`, thành công) ngày 21/09/2026.
 - DJI Fly chính hãng: đã cài, package `dji.go.v5`, versionName 1.21.10, versionCode 3115981,
   minSdk 24 / targetSdk 34, installerPackageName=com.google.android.packageinstaller.
+- frida-server: push lên `/data/local/tmp/frida-server` (58856048 bytes), chmod 755, chạy bằng
+  `su` (PID 27606). `frida-ps -U` từ máy tính chạy OK, thấy tiến trình "DJI Fly" (PID 25992)
+  đang chạy trên điện thoại — người dùng đã mở app.
+  Lưu ý: trên Git Bash/MSYS, lệnh `adb push`/`adb shell` với đường dẫn Unix tuyệt đối
+  (`/data/local/tmp/...`) bị MSYS tự dịch sai thành đường dẫn Windows → phải chạy với
+  `MSYS_NO_PATHCONV=1` phía trước. Không gặp vấn đề này khi chạy trong cmd.exe thường.
 
 ## Việc còn lại của Ngày 2
-- [ ] frida-server: push lên máy, chạy, xác nhận `frida-ps -U` liệt kê được tiến trình
 - [ ] DJI Fly (`dji.go.v5`): đăng nhập, ghép cặp Neo 2, xác nhận xem được video
 - [ ] Lưu APK vào `apk\` (dùng `pm path dji.go.v5` rồi `adb pull`)
 - [ ] Ẩn root nếu DJI Fly từ chối chạy vì phát hiện root (Zygisk + DenyList trong Magisk)
