@@ -17,7 +17,12 @@
   trạng thái adb lần cuối kiểm tra: không có thiết bị kết nối (chưa cắm/chưa authorized) — cần làm ở Ngày 2
 - Kết quả check_env.py: ALL OK - Day 1 done (chạy lúc 21/09/2026)
 
-## Việc còn cần xác nhận thủ công (GUI, do người dùng làm)
-- [ ] Mở Wireshark: không có hộp thoại "Lua: Error during loading"
-- [ ] Help → About Wireshark → tab Plugins: có dòng `init.lua`
-- [ ] Analyze → Enabled Protocols…, gõ `dji`: thấy `DJI_DUMLV1`, `DJI_MAVIC`, `DJI_P3`
+## Xác nhận thủ công (GUI, người dùng làm ngày 21/09/2026)
+- [x] Mở Wireshark: không có hộp thoại "Lua: Error during loading"
+- [ ] Help → About Wireshark → tab Plugins: **không** thấy `init.lua` (tab chỉ liệt kê các plugin
+  nhị phân .dll, không có mục nào cho Lua script cá nhân trên bản 4.6.8 này) — coi là khác biệt
+  hiển thị của phiên bản, không phải lỗi cấu hình, vì mục dưới đã xác nhận init.lua chạy được.
+- [x] Analyze → Enabled Protocols…, gõ `dji`: thấy `DJI_DUMLV1`, `DJI_MAVIC`, `DJI_P3` — bằng
+  chứng chức năng rằng init.lua đã nạp thành công các dissector từ tools\dji-dissectors.
+
+Kết luận: dissector DUML hoạt động. Việc gán dissector cho pcap thật (Decode As / DLT_USER) để Ngày 4.

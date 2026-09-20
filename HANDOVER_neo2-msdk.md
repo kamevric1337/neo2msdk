@@ -43,7 +43,7 @@ Mục tiêu PoC: bắt được traffic thật → nhìn ra cấu trúc frame �
 
 | Ngày | Nội dung | Trạng thái |
 |---|---|---|
-| 1 | Cài công cụ trên máy tính | **Đang làm — xong Bước 9/11** |
+| 1 | Cài công cụ trên máy tính | **Xong (11/11)** — xem `notes\moi-truong.md` |
 | 2 | Chuẩn bị điện thoại (đã root sẵn) + DJI Fly | Chưa |
 | 3 | Capture traffic lần đầu | Chưa |
 | 4 | Đọc traffic bằng Wireshark | Chưa |
