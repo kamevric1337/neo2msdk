@@ -3,3 +3,4 @@ tools/
 captures/
 apk/
 ghidra-projects/
+__pycache__/

@@ -59,8 +59,8 @@ Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
       `dji-dumlv1-general.lua`, `dji-dumlv1-gimbal.lua`, `dji-dumlv1-camera.lua` để tìm trường
       pin (battery), vì `dji-dumlv1-proto.lua` chỉ có phần lõi giao thức, chưa có định nghĩa
       các cmd set cụ thể.
-- [x] Xác nhận kênh video (gói lớn) có mã hóa hay không — KHÔNG mã hóa, H.265 960x720 (xem cuối file).
-      Còn nên giải mã thử bằng ffmpeg để chốt 100%.
+- [x] Xác nhận kênh video (gói lớn) có mã hóa hay không — KHÔNG mã hóa, H.265 960x720, đã giải mã
+      ra hình bằng ffmpeg (xem cuối file).
 
 ## cap_01_connect.pcap
 - Thời điểm: 2026-09-29, ngay sau cap_02_idle_30s
@@ -221,7 +221,7 @@ Nhận định cũ "byte 6-7 là sequence" là SAI — byte 6 là loại kênh, 
     VPS/SPS/PPS (32/33/34) + IDR (20) / CRA (21).
   - 0 vi phạm emulation-prevention trong 24 MB — dữ liệu mã hóa sẽ gây vài vi phạm ngẫu nhiên.
   - ~40 start code lạ (loại NAL hiếm/sai header) — nghi do mất gói / đoạn nối lại, CHƯA kiểm chứng.
-  - Chưa giải mã thực bằng ffmpeg (máy chưa cài) — bước chốt còn lại.
+  - ĐÃ giải mã thực bằng ffmpeg — xem mục "Giải mã video bằng ffmpeg" bên dưới.
 - Gói drone→app loại "khác" (byte6=0x02, < 1000 byte, 473 gói ở cap_02) = gói cuối của khung hình
   video (ngắn hơn), không phải kênh riêng.
 
@@ -230,3 +230,27 @@ Nhận định cũ "byte 6-7 là sequence" là SAI — byte 6 là loại kênh, 
 - +0.058s app gửi thẳng (không qua tunnel) `set 0x00 id 0x01` tới `0x0e`, `0x1f`, `0xa2`, `0x00`
   và `set 0x07 id 0x93` tới `0x07` → nghi là lệnh hỏi phiên bản / đăng ký thiết bị.
 - +0.160s drone bắt đầu đẩy lại telemetry qua tunnel như bình thường.
+
+### Giải mã video bằng ffmpeg — CHỐT: video KHÔNG mã hóa
+- ffmpeg 9.0.2 cài qua `winget install Gyan.FFmpeg --scope user` (choco lỗi vì cần quyền admin).
+  Binary: `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_...\ffmpeg-9.0.2-full_build\bin\`
+  (PATH chỉ có hiệu lực ở shell mới).
+- Script: `poc/extract_video.py` (ghép `payload[20:]` kênh 0x02, tùy chọn `--params` mượn VPS/SPS/PPS).
+- ffprobe: `hevc`, profile Main, 960x720, yuv420p. Giải mã ra ảnh camera drone rõ nét (cảnh trong
+  phòng) → xác nhận 100% luồng video là H.265 thô, không mã hóa. Ảnh trích nằm ở
+  `captures/frames_cap01/`, `captures/frames_cap04/` (gitignored — có người trong khung hình).
+- **Drone KHÔNG gửi keyframe định kỳ:** VPS/SPS/PPS + IDR chỉ xuất hiện khi mở phiên / nối lại
+  (cap_01 t≈63.7s). cap_02 (30s) và cap_04 (23 phút) không có bộ tham số hay IDR nào. Giải mã
+  giữa phiên: mượn bộ tham số của phiên khác (`--params captures/cap_01.h265` — dùng được, nghĩa là
+  cấu hình encoder giống nhau giữa các phiên) + `ffmpeg -flags2 +showall -err_detect ignore_err`.
+  Ảnh bắt đầu xám rồi hiện dần qua các khối intra trong P-frame (khung 15, 60 còn mờ; khung 600 gần
+  rõ, vẫn còn vài vùng khối) → phục hồi kiểu intra-refresh chậm. Hệ quả cho SDK: khi tự nhận video
+  giữa phiên phải chờ vài chục giây mới có hình sạch, hoặc tìm lệnh DUML yêu cầu I-frame (nhiều khả
+  năng app gửi lệnh này khi nối lại — chưa xác định).
+- Kết quả đếm khung (`ffprobe -count_frames`, có `+showall`):
+  - cap_01: 324 khung (chỉ đoạn sau VPS lúc nối lại; ~23.7s trước đó không giải mã vì bộ tham số
+    nằm sau trong file — chạy lại với `--params` nếu cần). 26 chỗ nhảy seq (phần lớn quanh lúc
+    mất kết nối).
+  - cap_02: 905/905 khung (khớp đúng 905 TRAIL_R đếm được), 2 chỗ nhảy seq.
+  - cap_04: 41 442 khung trong ~1382s (13:16:54.8 → 13:39:56.7) = 30.0 fps, giải mã hết cả capture
+    23 phút chỉ với bộ tham số mượn từ cap_01. 55 chỗ nhảy seq trong 782 326 gói video.
