@@ -130,3 +130,47 @@ Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
   Đã kéo về `captures/cap_04_battery_drain.pcap`.
 - Gợi ý phân tích: tìm trong các gói DUML một byte đổi 0x40→0x3F quanh 13:38:22 VÀ 0x3F→0x3E
   quanh 13:39:53 (hai mốc chính xác). Các mốc khác chỉ dùng để kiểm tra chéo.
+
+### Kết quả phân tích cap_04: ĐÃ TÌM RA trường % pin
+Script: `poc/find_battery_field.py` (stdlib, ~50s cho file 1.23 GB).
+
+**Sửa hiểu biết cũ về cổng 9003** (xem phần cap_02 ở trên):
+- Frame DUML KHÔNG chỉ nối liền nhau từ byte 34. Frame `cmd_set 0x51 / cmd_id 0x01`
+  (`0x27→0xee`, `0x3b→0xe9`, chiếm phần lớn frame) là **tunnel**: payload của nó chứa các frame
+  DUML khác. Các frame thật nằm ở nhiều offset (34, 45 = 34+11, …).
+- Cách parse đúng: quét mọi `0x55`, nhận frame khi qua CRC8 header (init 0x77, poly 0x8C
+  reflected) và CRC16 (init 0x3692, poly 0x8408 reflected). Trên 30k gói nhỏ: 76 245 frame qua
+  cả 2 CRC, chỉ 107 qua CRC8 mà trượt CRC16 → tiêu chí rất sạch.
+- Frame DUML hợp lệ xuất hiện cả trong các gói lớn (~859k gói có ≥1 frame), không chỉ gói < 200 byte.
+
+**Trường % pin** (khớp cả 2 mốc chính xác, giảm đơn điệu 78→62, đổi đúng 16 lần):
+1. `src=0x0b (pin) → dst=0x02 (app)`, `cmd_set=0x0d`, `cmd_id=0x02`, payload dài 44 byte,
+   **payload[20]** = % pin (uint8). Gửi ~1 lần/giây. → Nguồn gốc, dùng cái này.
+2. `src=0x03 (flight controller) → dst=0x02` và `→ dst=0x0e`, `cmd_set=0x03`, `cmd_id=0x55`,
+   payload dài 10 byte, **payload[8]** = % pin. Luôn trễ ~0.05–1s sau (1) → FC chuyển tiếp lại.
+   (Tên "FlyC Limit State Get" trong `dji-dumlv1-flyc.lua` là của dòng drone cũ, không áp dụng.)
+
+Thời điểm chuyển mốc trong pcap (nguồn 1): 78→77 13:17:55.8 · 77→76 13:19:32.2 · 76→75 13:21:08.7 ·
+75→74 13:22:25.0 · 74→73 13:23:59.7 · 73→72 13:25:35.1 · 72→71 13:27:09.7 · 71→70 13:28:24.8 ·
+70→69 13:29:57.3 · 69→68 13:31:30.8 · 68→67 13:32:45.3 · 67→66 13:34:00.0 · 66→65 13:35:32.2 ·
+65→64 13:37:03.7 · 64→63 13:38:17.3 · 63→62 13:39:48.7. Tốc độ ~75–97s/1%.
+
+Đối chiếu với mốc người dùng: hai mốc chính xác trễ **4.9s** (63) và **4.3s** (62) so với pcap →
+tổng độ trễ hiển thị app + phản ứng + gõ tin + adb ≈ 4–5s, nhất quán. Mọi mốc không chính xác đều
+khớp giới hạn trên đã ghi (vd. 64% trong pcap 13:37:03.7, người dùng báo 13:37:22 → trễ ~18s, đúng
+với việc người dùng xác nhận không báo ngay). Lần đọc "66%" lúc 13:35:33 xảy ra 1s sau khi pcap đã
+sang 65 → nằm trong độ trễ hiển thị ~4–5s, hợp lý.
+
+Mẫu payload 0x0d/0x02 (44 byte), trước/sau mốc 63%:
+```
+13:38:16.239 00 57 1e 00 00 55 fd ff ff 67 06 00 00 18 04 00 00 ff 01 02 40 00 00 00 00 03 80 00 00 13 01 64 00 00 f0 80 08 01 00 00 40 80 6b 00
+13:38:17.251 00 58 1e 00 00 64 fd ff ff 67 06 00 00 15 04 00 00 ff 01 02 3f 00 00 00 00 03 80 00 00 13 01 64 00 00 f0 80 08 01 00 00 40 80 6b 00
+```
+Giả thuyết CHƯA kiểm chứng cho các trường khác (cần capture có sạc/tải khác nhau để xác nhận):
+- payload[1:3] u16 LE = 7767→7768 → điện áp mV (~7.77 V, hợp với pin 2S)?
+- payload[5:9] i32 LE = -683 / -668 → dòng mA (âm = xả)?
+- payload[13:15] u16 LE = 1048→1045 → dung lượng còn lại mAh?
+- payload[31] = 100 → sức khỏe pin %?
+
+- [x] Tìm trường pin (việc Ngày 4) — xong.
+- [ ] Cập nhật parser cho cap_01/cap_02 theo cách quét CRC mới; xem lại các nhận định về header 34 byte.
