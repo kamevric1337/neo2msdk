@@ -22,7 +22,17 @@
   (`/data/local/tmp/...`) bị MSYS tự dịch sai thành đường dẫn Windows → phải chạy với
   `MSYS_NO_PATHCONV=1` phía trước. Không gặp vấn đề này khi chạy trong cmd.exe thường.
 
-## Việc còn lại của Ngày 2
-- [ ] DJI Fly (`dji.go.v5`): đăng nhập, ghép cặp Neo 2, xác nhận xem được video
-- [ ] Lưu APK vào `apk\` (dùng `pm path dji.go.v5` rồi `adb pull`)
-- [ ] Ẩn root nếu DJI Fly từ chối chạy vì phát hiện root (Zygisk + DenyList trong Magisk)
+- Ghép cặp trực tiếp qua Wi-Fi: đã kết nối thành công (không dùng RC), chưa cất cánh/điều khiển gì.
+  `wlan0` trên điện thoại: IP `192.168.2.12/24`. ARP/neighbor cho thấy Neo 2 ở
+  `192.168.2.1` (MAC `4c:43:f6:d8:b6:3a`). Không thấy default route (chỉ có route nội bộ
+  `192.168.2.0/24 dev wlan0`) — cần lưu ý khi capture Ngày 3, traffic tới drone chắc chắn
+  là UDP/TCP tới `192.168.2.1` trên cùng subnet.
+- APK: đã pull `apk\dji_fly_1.21.10_base.apk` (719464897 bytes, chỉ có base.apk, không có
+  split APK) — không commit (nằm trong .gitignore).
+- DJI Fly không báo lỗi phát hiện root khi chạy được tới bước xem video (chưa cần ẩn root bằng
+  Magisk DenyList).
+
+## Ngày 2: hoàn tất
+Đủ điều kiện định nghĩa hoàn thành Ngày 2: `adb devices` → `device`, `su -c id` → root,
+`frida-ps -U` chạy được, `tcpdump` có sẵn, DJI Fly kết nối và xem được Neo 2 qua Wi-Fi trực tiếp,
+APK đã lưu.
