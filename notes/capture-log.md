@@ -16,6 +16,10 @@ route nội bộ 192.168.2.0/24 dev wlan0.
 
 ### Phát hiện cấu trúc payload trên cổng 9003 (quan trọng cho Ngày 4/6)
 
+> **ĐÍNH CHÍNH (parse lại bằng CRC, xem mục "Cấu trúc gói cổng 9003 — parse lại cap_01/cap_02"
+> ở cuối file):** các nhận định dưới đây về byte 2-3 / 6-7 / 8-11, "78 5d" là timestamp, và
+> "gói lớn là video chưa rõ có mã hóa" đã được thay thế. Giữ nguyên bên dưới làm lịch sử.
+
 Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
 
 **Kiểu A — gói nhỏ/vừa (< ~200 byte), có cấu trúc rõ:**
@@ -47,15 +51,16 @@ Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
   cần đối chiếu với code APK ở Ngày 5 để biết drone có mã hóa kênh video hay không.
 
 ### Việc cần làm tiếp (Ngày 4)
-- [ ] Viết dissector Lua nhỏ (hoặc dùng Python/scapy trong `poc\`) tách header 34 byte rồi parse
-      các frame DUML phía sau trên cổng 9003.
-- [ ] Xác định ý nghĩa từng trường trong header 34 byte bằng cách capture dài hơn / nhiều lần,
-      xem trường nào tăng đều (sequence/timestamp) và trường nào cố định (ID phiên).
+- [x] Viết dissector Lua nhỏ (hoặc dùng Python/scapy trong `poc\`) tách header 34 byte rồi parse
+      các frame DUML phía sau trên cổng 9003. → `poc/duml_survey.py` (Python, kiểm CRC).
+- [x] Xác định ý nghĩa từng trường trong header 34 byte bằng cách capture dài hơn / nhiều lần,
+      xem trường nào tăng đều (sequence/timestamp) và trường nào cố định (ID phiên). → xem cuối file.
 - [ ] Đối chiếu cmd set/cmd id của các frame DUML tìm được với `dji-dumlv1-flyc.lua`,
       `dji-dumlv1-general.lua`, `dji-dumlv1-gimbal.lua`, `dji-dumlv1-camera.lua` để tìm trường
       pin (battery), vì `dji-dumlv1-proto.lua` chỉ có phần lõi giao thức, chưa có định nghĩa
       các cmd set cụ thể.
-- [ ] Xác nhận kênh video (gói lớn) có mã hóa hay không — đối chiếu Ngày 5.
+- [x] Xác nhận kênh video (gói lớn) có mã hóa hay không — KHÔNG mã hóa, H.265 960x720 (xem cuối file).
+      Còn nên giải mã thử bằng ffmpeg để chốt 100%.
 
 ## cap_01_connect.pcap
 - Thời điểm: 2026-09-29, ngay sau cap_02_idle_30s
@@ -173,4 +178,55 @@ Giả thuyết CHƯA kiểm chứng cho các trường khác (cần capture có 
 - payload[31] = 100 → sức khỏe pin %?
 
 - [x] Tìm trường pin (việc Ngày 4) — xong.
-- [ ] Cập nhật parser cho cap_01/cap_02 theo cách quét CRC mới; xem lại các nhận định về header 34 byte.
+- [x] Cập nhật parser cho cap_01/cap_02 theo cách quét CRC mới; xem lại các nhận định về header 34 byte.
+
+## Cấu trúc gói cổng 9003 — parse lại cap_01/cap_02
+Script: `poc/duml_survey.py` (chạy trong `poc/`). Mọi kết luận dưới đây đúng 100% số gói trên cả
+cap_01 và cap_02 trừ khi ghi khác.
+
+### Header chung 16 byte đầu (mọi gói, cả hai chiều)
+| Byte | Ý nghĩa | Bằng chứng |
+|---|---|---|
+| 0-1 | u16 LE = `0x8000 \| độ dài payload UDP` (bit 15 luôn bật) | khớp 19356/19356 (cap_02), 19826/19826 (cap_01) |
+| 2-3 | ID phiên kết nối, **tăng 1 mỗi lần kết nối lại**: `0xabb0` → `0xabb1` đúng ở gói đầu tiên sau khi nối lại (cap_01, t=63.73s); cap_04 vẫn `0xabb1` | cap_01 |
+| 4-5 | Kênh video: số thứ tự gói, **+8 mỗi gói** (17072/17075 bước). Kênh khác: 0 | bước ≠8 = mất gói/nối lại |
+| 6 | **Loại kênh**: `0x01` drone→app DUML/keep-alive · `0x02` drone→app video · `0x04` app→drone DUML/keep-alive · `0x00` gói bắt tay khi nối lại (1 gói/chiều, cap_01) | |
+| 7 | **Checksum = XOR byte 0..6** | 19356/19356, 19825/19825 |
+| 8-11 | app→drone: hai u16 bằng nhau = **seq video mới nhất app đã nhận (ACK)** — hiệu số với seq video mới nhất trong pcap: trung vị 0, p90 0. drone→app kênh 1: cặp giá trị seq video (chưa rõ nghĩa chính xác). Kênh video: [8:10] = seq gói đầu của khung hình?, [10:12] = seq của chính gói | |
+| 12-15 | thường 0 | |
+
+(Nhận định cũ "byte 8-11 không đổi, có thể là ID phiên" là SAI — chỉ không đổi trong vài gói liền nhau.
+Nhận định cũ "byte 6-7 là sequence" là SAI — byte 6 là loại kênh, byte 7 là checksum.)
+
+### Kênh DUML (byte6 = 0x01 / 0x04): header 34 byte
+- Byte 16-31: gần như luôn `78 5d 78 5d 00 00 00 00 78 5d 78 5d 00 00 00 00` (không phải timestamp —
+  không đổi trong cả capture 23 phút cap_04). Chưa rõ nghĩa.
+- Byte 32-33: u16 LE = độ dài phần sau header (khớp 99.9% gói app→drone và mọi gói DUML drone→app).
+- Sau byte 34: các frame DUML nối liền nhau (918/927 gói nhỏ app→drone "kín"), hoặc không có gì
+  (gói 34 byte = keep-alive).
+- Frame cấp ngoài gần như luôn là tunnel `0x27→0xee` (drone→app) / `0x3b→0xe9` (app→drone)
+  `cmd_set 0x51 cmd_id 0x01`, chứa frame DUML thật bên trong. Ngoài tunnel chỉ có vài lệnh gửi
+  thẳng: `0x02→0xa9 set 0x01 id 0x0a` (app, ~20/s), `0x07→0x02 set 0x07 id 0x94` (~1/s).
+- Frame lồng phổ biến (drone→app): `0x92→0x02 set 0x23 id 0xb2`, `0x28→0x02 set 0x00 id 0x99`,
+  `0x03→0x0e set 0x03 id 0x43` (FC OSD?), `0x04→0x02 set 0x04 id 0x05` (gimbal?), `0x01→0x02 set
+  0x02 id 0x80`, … ~10 Hz. Pin: `0x0b→0x02 set 0x0d id 0x02` (xem phần cap_04).
+
+### Kênh video (byte6 = 0x02): header 20 byte, **H.265 KHÔNG mã hóa**
+- Byte 16-19: trường riêng của video (vd. `f8 13 60 6d`, `f8 93 60 6d`, `f8 13 61 6d`), chưa giải mã.
+- Byte 20+: luồng H.265 Annex-B, ghép liền `payload[20:]` các gói kênh 2 là ra bitstream hợp lệ.
+  Gói bắt đầu khung hình có `00 00 00 01` ngay tại byte 20 (908 gói / 30.2s ≈ **30 fps**).
+- Kiểm tra trên cap_01 (ghép ra `captures/cap_01_video.h265`, 23.96 MB):
+  - SPS: profile Main, level 5.0, 4:2:0, **960x720**.
+  - Mỗi khung: AUD (35) → TRAIL_R (1) → 2× SUFFIX_SEI (40); 1093 khung. Sau khi nối lại có
+    VPS/SPS/PPS (32/33/34) + IDR (20) / CRA (21).
+  - 0 vi phạm emulation-prevention trong 24 MB — dữ liệu mã hóa sẽ gây vài vi phạm ngẫu nhiên.
+  - ~40 start code lạ (loại NAL hiếm/sai header) — nghi do mất gói / đoạn nối lại, CHƯA kiểm chứng.
+  - Chưa giải mã thực bằng ffmpeg (máy chưa cài) — bước chốt còn lại.
+- Gói drone→app loại "khác" (byte6=0x02, < 1000 byte, 473 gói ở cap_02) = gói cuối của khung hình
+  video (ngắn hơn), không phải kênh riêng.
+
+### Kết nối lại (cap_01, t=63.73s)
+- Gói đầu tiên sau gián đoạn là app→drone byte6=`0x00` (bắt tay), ID phiên chuyển sang `0xabb1`.
+- +0.058s app gửi thẳng (không qua tunnel) `set 0x00 id 0x01` tới `0x0e`, `0x1f`, `0xa2`, `0x00`
+  và `set 0x07 id 0x93` tới `0x07` → nghi là lệnh hỏi phiên bản / đăng ký thiết bị.
+- +0.160s drone bắt đầu đẩy lại telemetry qua tunnel như bình thường.
