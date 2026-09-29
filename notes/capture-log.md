@@ -56,3 +56,26 @@ Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
       pin (battery), vì `dji-dumlv1-proto.lua` chỉ có phần lõi giao thức, chưa có định nghĩa
       các cmd set cụ thể.
 - [ ] Xác nhận kênh video (gói lớn) có mã hóa hay không — đối chiếu Ngày 5.
+
+## cap_01_connect.pcap
+- Thời điểm: 2026-09-29, ngay sau cap_02_idle_30s
+- Hành động: tắt Wi-Fi trên điện thoại, đợi vài giây, bật lại, chờ tự kết nối lại và xem video
+  trở lại. tcpdump chạy nền trước khi tắt Wi-Fi, dừng sau khi video hiện lại.
+- Kích thước: 27 005 416 bytes, 20649 frame, thời lượng capture ~74.7s
+- Protocol hierarchy thấy thêm (so với lúc idle): EAPOL (8 frame — bắt tay WPA), DHCP (9 frame),
+  ARP (38 frame), cùng DNS/TLS/HTTP/NTP lạc — traffic nền của điện thoại khi Wi-Fi vừa lên lại,
+  không liên quan tới Neo 2.
+- **Mốc thời gian quan trọng** (frame.time_relative, giây thứ mấy kể từ lúc bắt đầu capture):
+  - t=23.7s: gói cuối cùng tới/từ port 9003 trước khi mất kết nối (khớp lúc tắt Wi-Fi)
+  - t=42.75s–42.94s: bắt tay EAPOL (4 message) + DHCP Request/ACK — nhưng đây là **kết nối
+    nhầm vào mạng khác**: ARP ngay sau đó cho thấy điện thoại có IP `192.168.2.77` nói chuyện
+    với `192.168.2.253` (không phải `192.168.2.1` của Neo 2). Có polling ARP lặp lại nhiều lần
+    tới `192.168.2.1` không có trả lời trong khoảng t=43–62s → đúng là chưa nối lại được Neo 2.
+  - t=63.12s–63.34s: bắt tay EAPOL + DHCP Discover/Offer/Request/ACK lần 2 — lần này đúng mạng
+    Neo 2, điện thoại nhận lại IP cũ `192.168.2.12`.
+  - t=63.7s: gói đầu tiên tới/từ port 9003 xuất hiện trở lại (drone 192.168.2.1).
+  - **Tổng thời gian gián đoạn traffic với drone: ~40 giây** (23.7s → 63.7s), phần lớn do điện
+    thoại tự nối nhầm mạng khác trước khi quay lại đúng Neo 2.
+- Ý nghĩa: khi test capture "mất kết nối / nối lại" thực tế trên máy này, nên tắt hẳn Wi-Fi của
+  mạng khác (hoặc đứng ngoài vùng phủ của mạng đó) để tránh nhiễu kết quả, hoặc chấp nhận độ trễ
+  ~40s do hành vi tự chọn mạng của Android.
