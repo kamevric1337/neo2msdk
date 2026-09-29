@@ -79,3 +79,54 @@ Có **hai kiểu gói** khác hẳn nhau trên cùng 1 cổng UDP:
 - Ý nghĩa: khi test capture "mất kết nối / nối lại" thực tế trên máy này, nên tắt hẳn Wi-Fi của
   mạng khác (hoặc đứng ngoài vùng phủ của mạng đó) để tránh nhiễu kết quả, hoặc chấp nhận độ trễ
   ~40s do hành vi tự chọn mạng của Android.
+
+## cap_04_battery_drain.pcap
+- Bắt đầu ghi: 2026-09-29 13:16:56 (giờ điện thoại, lệnh `date` qua adb)
+- Mốc % pin quan sát trên app DJI Fly (nguồn: người dùng đọc màn hình, đối chiếu giờ điện thoại):
+  - 79% → 78%: xảy ra khoảng 13:16:27 (ước lượng, người dùng báo "khoảng 20s trước" lúc 13:16:47)
+    — mốc này XẢY RA TRƯỚC khi bắt đầu ghi (13:16:56), không nằm trong pcap, chỉ ghi để tham khảo
+    tốc độ giảm pin.
+  - 78% → 77%: người dùng báo lúc công cụ `adb shell` đang lỗi tạm thời (transient classifier
+    error), không lấy được giờ ngay lúc đó. Giờ điện thoại lấy được ngay khi công cụ hoạt động
+    lại: 13:20:22 — mốc 77% xảy ra TRƯỚC thời điểm này, sai số ước lượng khoảng 1-2 phút do độ
+    trễ chờ công cụ. Coi mốc này là kém chính xác hơn các mốc khác, không dùng để tính chính xác
+    tốc độ giảm pin.
+  - 77% → 76%: người dùng báo lúc công cụ `adb shell` lại lỗi tạm thời lần nữa (kéo dài qua nhiều
+    lần thử, cộng thêm gián đoạn do đổi chế độ quyền `/permissions`). Giờ điện thoại lấy được khi
+    công cụ hoạt động lại: 13:24:24 — mốc 76% xảy ra TRƯỚC thời điểm này, sai số ước lượng khá lớn
+    (có thể vài phút) do khoảng gián đoạn công cụ kéo dài. Coi mốc này kém chính xác nhất trong
+    các mốc đã ghi.
+  - 76% → ... → 72%: KHÔNG bắt được từng mốc trung gian (75/74/73%) — trong lúc này người dùng
+    và Claude đang xử lý sự cố công cụ + đổi cấu hình `/permissions`, không theo dõi màn hình
+    liên tục. Người dùng chỉ báo lại đã thấy 72% sau khi quay lại theo dõi. Không có giờ chính
+    xác cho các mốc này.
+  - 70% → 69%: người dùng báo xảy ra ĐÚNG lúc gửi tin nhắn báo — nhưng công cụ `adb shell` (cả
+    Bash và PowerShell) đều lỗi tại thời điểm đó nên không lấy được giờ điện thoại ngay. Cần lấy
+    bù giờ khi công cụ ổn định trở lại và coi đây là mốc tốt thứ nhì (biết chính xác THỜI ĐIỂM
+    tương đối so với tin nhắn, chỉ thiếu giờ tuyệt đối).
+    - Lấy bù (khi resume session): adb hoạt động lại, giờ điện thoại 13:35:01 — mốc 69% xảy ra
+      TRƯỚC thời điểm này (không rõ bao lâu, do gián đoạn giữa hai session). tcpdump vẫn đang chạy
+      (PID 9542), file pcap ~972 MB lúc 13:35:04 → capture KHÔNG bị ngắt.
+  - 69% → ... → 66%: các mốc 68/67% KHÔNG bắt được (nằm trong khoảng gián đoạn giữa hai session).
+    Người dùng báo pin đang 66% (đọc trạng thái, không phải khoảnh khắc chuyển mốc) — giờ điện
+    thoại lúc nhận tin: 13:35:33. Đây KHÔNG phải thời điểm 67→66%, chỉ biết mốc đó xảy ra trước
+    13:35:33.
+  - 66% → 65%: người dùng báo "giờ 65 r" — giờ điện thoại lúc nhận tin: 13:35:50. Chỉ 17s sau
+    lần đọc 66% (13:35:33), nhanh bất thường so với các mốc trước (vài phút/1%). Cách báo ("đã 65
+    rồi") không chắc là khoảnh khắc chuyển mốc → coi 13:35:50 là giới hạn trên, mốc 65% nằm trong
+    khoảng (13:35:33, 13:35:50]. Có thể 66% đã hiển thị từ lâu trước 13:35:33.
+  - 65% → 64%: người dùng báo "64 rồi" — giờ điện thoại lúc nhận tin: 13:37:22 (92s sau lần báo
+    65%). Chưa rõ người dùng báo ngay khi số nhảy hay vài giây sau → tạm coi 13:37:22 là giới hạn
+    trên, sai số dự kiến nhỏ (vài giây) nếu người dùng đang canh màn hình.
+    → Người dùng xác nhận: KHÔNG báo ngay lúc số nhảy → mốc 64% chỉ là giới hạn trên
+      (xảy ra trong khoảng (13:35:50, 13:37:22]). Mốc chính xác đầu tiên sẽ là 64% → 63%.
+  - 64% → 63%: **MỐC CHÍNH XÁC** — người dùng canh màn hình, nhắn "63" ngay khi số nhảy. Giờ
+    điện thoại: 13:38:22 (sai số vài giây: thời gian gõ tin + độ trễ adb). Mốc tham chiếu tốt nhất
+    để đối chiếu với pcap.
+  - 63% → 62%: **MỐC CHÍNH XÁC** — người dùng nhắn "62" ngay khi số nhảy. Giờ điện thoại:
+    13:39:53 (sai số vài giây). Cách mốc 63% 91s → tốc độ ~1.5 phút/1%, khớp với khoảng 65→64.
+- Dừng ghi: 13:39:57 (SIGINT tới tcpdump PID 9542), ngay sau mốc 62%.
+- Kết quả: 1 229 911 847 byte (~1.23 GB), ~899k gói, gói đầu 13:16:54.84, gói cuối 13:39:56.74.
+  Đã kéo về `captures/cap_04_battery_drain.pcap`.
+- Gợi ý phân tích: tìm trong các gói DUML một byte đổi 0x40→0x3F quanh 13:38:22 VÀ 0x3F→0x3E
+  quanh 13:39:53 (hai mốc chính xác). Các mốc khác chỉ dùng để kiểm tra chéo.
