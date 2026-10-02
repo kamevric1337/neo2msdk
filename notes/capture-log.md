@@ -519,3 +519,16 @@ cần thí nghiệm có kiểm soát (che/di chuyển cảm biến) — để sa
 - [x] Giải mã trường pin đầy đủ (điện áp/dòng/dung lượng/nhiệt độ/cell) — xong, kiểm chứng cap_04.
 - [x] Định danh module 0x28 (camera) và 0x92 (cảm biến tốc độ cao) — xong ở mức định danh.
 - [ ] Giải mã nội dung nhị phân của 0x92 — cần thí nghiệm có kiểm soát (sau).
+
+## Ngày 6 (tiếp) — đào sâu APK: danh mục khả năng SDK
+Chi tiết: `notes/apk-key-catalog.md`; danh sách đầy đủ 6216 key: `notes/apk-sdk-keys.txt`.
+Tóm tắt:
+- `iLink`/`libilink*.so` = đăng nhập tài khoản DJI qua cloud (không phải link drone);
+  `libilink_network.so` = Tencent Mars (CDN/HTTP). Giao thức 9003 dựng ở lớp khác (libsdk_jni.so,
+  87 MB, đã strip) — không đào bộ dựng header vì đã dựng lại đủ bằng thực nghiệm.
+- Trích 6216 key từ `libsdk_key_value.so`. SDK có đúng key khớp trường ta đã giải mã:
+  `GimbalAttitudeQuaternion`, `AttitudeQuaternion`, `CompassHeading`, `BatteryVoltage`,
+  `AppRequestIFrame` → xác nhận chéo hướng revert là đúng.
+- Lộ trình điều khiển (cho bay thử sau): nhóm `Joystick*`/`VirtualJoyStick` (cần điều khiển),
+  `TakeOff`/`ForceLanding`, `GoHome*`, và nhóm điều khiển gimbal `GimbalMotionControlReq`/
+  `GimbalAngleRotation`.
