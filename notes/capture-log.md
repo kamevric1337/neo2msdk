@@ -413,3 +413,53 @@ khỏi vị trí giữa", không phải góc có dấu.
     = quaternion hướng camera. Tầm pitch gimbal quan sát: khoảng -90° (chúc thẳng xuống) đến +70..+102°.
 - Dissector `dji-neo2-udp.lua` đã thêm trường `dji_neo2.gimbal_pitch_ddeg`; tshark đọc đúng ở các
   cửa sổ giữ yên (lúc gimbal đang quay nhanh thì hiện giá trị quá độ, bình thường).
+
+## cap_08_attitude.pcap — tìm trường hướng drone (yaw/pitch/roll IMU)
+- Drone động cơ TẮT, cầm/nghiêng bằng tay. Mục tiêu: tách 3 trường yaw/pitch/roll bằng cách đổi
+  từng trục một từ tư thế phẳng.
+- Bắt đầu ghi: 2026-10-02 16:23:59, tcpdump PID 9686, `/sdcard/cap_08_attitude.pcap`.
+- Mốc thao tác (giờ điện thoại):
+  - Bước 1 (PHẲNG, mũi hướng trước - gốc): 16:24:54
+  - Bước 2 (XOAY NGANG ~90° CW, yaw): 16:25:23
+  - Bước 3 (CHÚC MŨI XUỐNG ~45°, pitch): 16:32:00
+  - Bước 4 (NGHIÊNG TRÁI ~45°, roll): 16:32:43
+  - Bước 5 (PHẲNG lại như gốc): 16:33:12
+- Dừng ghi: ~16:33:1x (SIGINT). File ~481 MB, đã kéo về `captures/cap_08_attitude.pcap`.
+
+### Kết quả: hướng thân drone nằm trong FC OSD General, LAYOUT CHUẨN DJI
+Frame `src=0x03 (FC) → dst=0x0e set=0x03 id=0x43` ("OSD General Data"), payload 85 byte, đẩy ~10 Hz.
+Trùng khớp cấu trúc `flyc_osd_general` trong `dji-dumlv1-flyc.lua` (offset tính từ đầu payload sau
+11 byte header DUML):
+- **payload[24:26] = pitch (i16, 0.1°)**
+- **payload[26:28] = roll  (i16, 0.1°)**
+- **payload[28:30] = yaw   (i16, 0.1°, = hướng la bàn)**
+
+Kiểm chứng cap_08 (đổi từng trục một từ phẳng; đơn vị độ):
+| bước | pitch | roll | yaw |
+|---|---|---|---|
+| B1 phẳng    | -2.5  | +0.2  | -70.5 |
+| B2 xoay 90° | -2.3  | +0.1  | **+28.8** (Δ≈+99°) |
+| B3 chúc mũi | **+34.1** | -3.7 | -64.0 |
+| B4 nghiêng trái | -3.1 | **+42.5** | -72.0 |
+| B5 phẳng    | -2.6  | +0.0  | -67.1 |
+
+Mỗi trục chỉ đổi mạnh ở đúng bước của nó; B1≈B5 (về gần tư thế gốc). pitch/roll phẳng ~0° (lệch
+nhỏ do đặt tay + drone kê không hoàn toàn cân). → kết luận chắc chắn.
+
+Hệ quả lớn: Neo 2 dùng **layout OSD General chuẩn DJI** → dissector DUML có sẵn tự parse đúng
+pitch/roll/yaw, và các trường cùng frame (lat/lon [0:16] double, relative_height [16:18], vận tốc
+vgx/vgy/vgz [18:24], flyc_state, GPS…) nhiều khả năng cũng chuẩn — sẽ kiểm khi bay thật. Vì
+dissector `dji-neo2-udp.lua` đã bàn giao frame lồng cho `dji_dumlv1_main_dissector`, các trường này
+tự hiện trong Wireshark, KHÔNG cần thêm code.
+
+- [x] Gán trường hướng drone (yaw/pitch/roll) — xong, FC OSD General chuẩn DJI, offset 24/26/28.
+
+### Tổng kết trường telemetry đã xác định (Ngày 3-5)
+| Đại lượng | Frame (src→dst set/id) | Vị trí payload | Đơn vị | Bản ghi |
+|---|---|---|---|---|
+| % pin | 0x0b→0x02 0x0d/0x02 | [20] u8 | % | cap_04 |
+| Xin keyframe | 0x02→0x09 0x01/0x01 | [5] bit 0x20 | cờ | cap_05 |
+| Gimbal pitch | 0x04→0x02 0x04/0x05 | [0:2] i16 + quat [24:40] | 0.1° | cap_06/07 |
+| Drone pitch | 0x03→0x0e 0x03/0x43 | [24:26] i16 | 0.1° | cap_08 |
+| Drone roll | 0x03→0x0e 0x03/0x43 | [26:28] i16 | 0.1° | cap_08 |
+| Drone yaw | 0x03→0x0e 0x03/0x43 | [28:30] i16 | 0.1° | cap_08 |
