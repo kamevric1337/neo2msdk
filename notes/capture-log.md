@@ -298,3 +298,40 @@ Trước mỗi lần, app gửi một **cặp lệnh cùng seq DUML** — cả h
 - **Bước kiểm chứng cần làm:** tự gửi lại (replay) cặp lệnh với X=0x24 khi đang xem video giữa
   phiên, xem drone có gửi VPS+IDR không; thử riêng từng lệnh. Cần tự dựng header ngoài 34 byte
   (ID phiên, checksum XOR, độ dài), seq DUML mới và CRC — đây là lần đầu GỬI gói tới drone.
+
+### Đối chiếu APK: xác nhận lệnh xin keyframe (Việc 1, Ngày 4)
+Công cụ: giải nén .so từ APK + đọc chuỗi (strings) + disassemble ARM64 (capstone) trong
+`tools`/script tạm. KHÔNG gửi gì tới drone — chỉ đọc tĩnh.
+
+**Bằng chứng tên hàm/khóa trong SDK (khớp đúng cặp lệnh tìm được ở cap_05):**
+- `libsdk_jni.so`, `libsdk_key_value.so`: khóa/hành động **`AppRequestIFrame`**.
+- `libsdk_jni.so` có symbol `uav::sdk::CameraAbstraction::ActionAppRequestIFrame(...)` → hành động
+  "app xin I-frame" thuộc nhóm **Camera**.
+- `libsdk_jni.so`: `uav::sdk::BaseAbstraction::SendActionPack<uav::core::app_request_i_frame>` và
+  kiểu phản hồi `uav_camera_get_app_request_i_frame_rsp` → có lệnh gửi đi tên `app_request_i_frame`
+  kèm gói phản hồi riêng (khớp ACK `0x09→0x02` quan sát được).
+- `libsdk_jni.so`: `uav::sdk::PigeonLiveViewIFrameRequest::RequestIFrame()`.
+- `libsdk_key_value.so`: `RequireIFrameMsg`, `IFrameInfo`, **`PM430RequestIFrame`** (PM430 = tên mã
+  nền tảng, nhiều khả năng của chính Neo 2), `RequireIFrame`.
+- `libuav_video_jni.so` (lớp giải mã video phía app):
+  - `[VideoStreamActionFeature][Demand-I] sendRequestNewIFrame___too fast` → app tự giới hạn tần
+    suất xin I-frame. **Khớp đúng** hành vi quan sát ở cap_05: app bắn 1–3 lần cờ=01 rồi thôi.
+  - `isDecodingFailRequestIFrame` → app xin I-frame khi giải mã lỗi (vd. vào/ra Album, mất gói).
+  - `requestBlackIFrame`, `GetBlackIFrame`, `DummyIFrame` → app có "I-frame đen" dựng sẵn để hiện
+    tạm trong lúc chờ keyframe thật (giải thích vì sao đôi khi màn hình có khung đen/xám ngắn).
+
+**Disassemble hàm dựng lệnh (libsdk_jni.so ~0x1f70560):** hàm đẩy một mục vào hàng đợi lệnh với
+`cmd_id = 0x47` (`strh w12,[x8]` với w12=0x47) và hằng số `0x18` (`w11=0x18`) gần đó — khớp
+`cmd_set 0x18 / cmd_id 0x47` của lệnh `0x02→0xe9` ở cap_05. (Chưa lần hết chuỗi gọi tới tận nơi
+đặt cmd_set, nhưng cặp hằng số + tên hàm `AppRequestIFrame` ở cùng vùng là đủ mạnh.)
+
+**Kết luận Việc 1:** gần như chắc chắn cặp lệnh ở cap_05 là **lệnh app xin I-frame (keyframe)**:
+- `0x02→0xe9 set 0x18 id 0x47` + `0x02→0x09 set 0x01 id 0x01`, byte payload `0x24` (bit 0x20 bật)
+  = "xin ngay", `0x04` = không xin.
+- Đích `0x09` = "HD transmission MCU air side" (bộ truyền hình trên drone) theo bảng DUML — hợp lý.
+- Vẫn nên replay để chốt 100% và biết lệnh nào trong cặp là bắt buộc, nhưng KHÔNG còn là suy đoán
+  thuần: tên hàm trong SDK xác nhận cơ chế tồn tại và đúng ngữ cảnh (xin khi lỗi giải mã, có giới
+  hạn tần suất).
+
+(Ghi chú: `libdatajar.so` 205 MB là ELF bọc nhiều tài nguyên nén, không phải dex; tên lớp Kotlin
+`com/mtmd/video/stream/GDRIFrame`, `uav/sdk/keyvalue/value/camera/IFrameInfo` nằm trong đó.)
