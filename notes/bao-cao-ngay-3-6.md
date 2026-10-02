@@ -1,6 +1,6 @@
 # Báo cáo tiến độ: Phân tích giao thức DJI Fly ↔ DJI Neo 2 qua Wi-Fi
 
-**Giai đoạn:** Phase 1 – PoC, Ngày 3–5 (bắt gói, phân tích lưu lượng, gắn tên trường telemetry)
+**Giai đoạn:** Phase 1 – PoC, Ngày 3–6 (bắt gói, phân tích, gắn tên telemetry, PoC đọc telemetry, đào sâu APK)
 **Thời gian thực hiện:** 29/09/2026 – 02/10/2026
 **Người thực hiện:** _(điền tên)_
 
@@ -23,6 +23,9 @@ Phần này giải thích các thuật ngữ kỹ thuật dùng trong báo cáo,
 | **adb** | *Android Debug Bridge*: công cụ điều khiển điện thoại Android từ máy tính qua cáp USB. |
 | **RC** | *Remote Controller*: tay điều khiển của drone. Trong thí nghiệm này không dùng RC, điện thoại nối thẳng với drone qua Wi-Fi. |
 | **Chế độ monitor** | Chế độ đặc biệt của card Wi-Fi cho phép nghe toàn bộ sóng Wi-Fi xung quanh. Nhờ bắt gói ngay trên điện thoại nên không cần tới chế độ này. |
+| **Key / action (SDK)** | Trong SDK của DJI, mỗi thứ đọc được hoặc điều khiển được có một "key" (tên định danh), ví dụ `BatteryVoltage`, `GimbalAttitudeQuaternion`. Danh mục key cho biết SDK làm được những gì. |
+| **Virtual stick / joystick** | Cơ chế gửi lệnh điều khiển bay bằng phần mềm (thay cho cần gạt vật lý trên tay điều khiển): app gửi các giá trị cần điều khiển (tiến/lùi, lên/xuống, xoay) tới drone. |
+| **Thư viện (library)** | Đoạn mã dùng lại được, cung cấp sẵn các hàm cho chương trình khác gọi — ở đây là bộ hàm đọc telemetry làm nền cho SDK. |
 
 ### Mạng và bắt gói
 
@@ -110,9 +113,10 @@ Phần này giải thích các thuật ngữ kỹ thuật dùng trong báo cáo,
 ## 1. Tóm tắt
 
 DJI Neo 2 hiện chưa được MSDK V5 chính thức hỗ trợ, nên nhóm chọn hướng tìm hiểu giao thức giữa app
-DJI Fly và drone để sau này tự xây một SDK riêng. Báo cáo này gộp kết quả ba ngày làm việc với dữ
+DJI Fly và drone để sau này tự xây một SDK riêng. Báo cáo này gộp kết quả bốn ngày làm việc với dữ
 liệu thật: bắt gói trên điện thoại trong lúc app kết nối trực tiếp với drone qua Wi-Fi, rồi phân tích
-offline. Ngày 3 tập trung hiểu cấu trúc gói; Ngày 4–5 gắn tên ý nghĩa cho các trường dữ liệu.
+offline. Ngày 3 hiểu cấu trúc gói; Ngày 4–5 gắn tên các trường dữ liệu; Ngày 6 đóng gói thành thư
+viện đọc telemetry và đào sâu mã nguồn app.
 
 Các kết quả chính:
 
@@ -124,10 +128,13 @@ Các kết quả chính:
    frame "tunnel"** (`cmd_set 0x51 / cmd_id 0x01`).
 4. **Luồng video là H.265 thô (960×720, 30 fps)**, đã ghép lại và giải mã ra hình bằng ffmpeg. Drone
    không gửi keyframe định kỳ, điều này ảnh hưởng trực tiếp tới thiết kế phần nhận video của SDK.
-5. **Đã gắn tên được nhiều trường dữ liệu** bằng phương pháp thay đổi có kiểm soát: phần trăm pin,
-   lệnh app xin keyframe, góc nghiêng gimbal, và hướng thân drone (pitch/roll/yaw). Hướng drone dùng
-   **đúng định dạng OSD chuẩn của DJI**, nên các dòng drone cũ và Neo 2 chia sẻ cùng cấu trúc.
-6. Đã viết **bộ giải mã (dissector) cho Wireshark** để cả nhóm mở file bắt gói là đọc hiểu được ngay.
+5. **Đã gắn tên được nhiều trường dữ liệu** bằng phương pháp thay đổi có kiểm soát: pin (đầy đủ: phần
+   trăm, điện áp, dòng, dung lượng, nhiệt độ, số cell), lệnh app xin keyframe, góc nghiêng gimbal, và
+   hướng thân drone (pitch/roll/yaw). Hướng drone dùng **đúng định dạng OSD chuẩn của DJI**.
+6. Đã viết **bộ giải mã (dissector) cho Wireshark** và một **thư viện Python đọc telemetry** — nền
+   tảng trực tiếp cho SDK (chỉ cần đổi nguồn từ file sang UDP trực tiếp là đọc được dữ liệu sống).
+7. Đào sâu APK: trích được **danh mục hơn 6000 khả năng (key) của SDK**, xác nhận chéo các trường đã
+   giải mã và vạch lộ trình điều khiển bay cho giai đoạn sau.
 
 ---
 
@@ -358,7 +365,50 @@ gói có checksum sai.
 
 ---
 
-## 5. Những nhận định ban đầu đã được điều chỉnh
+## 5. Kết quả Ngày 6: thư viện đọc telemetry, giải mã nốt trường pin, đào sâu APK
+
+### 5.1. Thư viện đọc telemetry (nền tảng cho SDK)
+
+Nhóm đã gói toàn bộ hiểu biết thành một **thư viện Python độc lập** (`poc/neo2_telemetry.py`) nhận một
+gói và trả về các sự kiện có tên: pin, góc gimbal, hướng drone, lệnh xin keyframe. Thư viện được thiết
+kế để dùng được cho cả hai nguồn: file đã bắt (để phát triển và kiểm thử ngay) và **UDP trực tiếp**
+(khi chạy cạnh drone sau này) — chỉ cần đổi nguồn, phần giải mã giữ nguyên. Đã kiểm thử chéo trên tất
+cả bản ghi và khớp 100% với kết quả phân tích thủ công. Đây là bước đầu tiên hiện thực hóa mục tiêu
+Phase 1 "đọc telemetry mà không cần DJI Fly".
+
+### 5.2. Giải mã đầy đủ dữ liệu pin
+
+Trước đó mới tìm được phần trăm pin. Ngày 6 giải mã trọn gói dữ liệu pin (theo định dạng chuẩn DJI,
+lệch một byte đầu) và kiểm chứng trên 23 phút xả: **điện áp, dòng điện, dung lượng còn lại và sạc đầy,
+nhiệt độ, số cell**. Mọi trường biến đổi hợp lý theo thời gian (điện áp và dung lượng giảm đều, dòng
+âm nghĩa là đang xả), và kiểm tra chéo khớp nhau (dung lượng còn / dung lượng đầy ≈ đúng phần trăm
+pin). Kết luận: pin Neo 2 là loại **2 cell (2S), dung lượng đầy khoảng 1639 mAh**.
+
+### 5.3. Định danh hai module còn lại
+
+Hai module trước đây chưa rõ (địa chỉ mới, không có trong tài liệu cộng đồng cũ) đã được định danh:
+- **Module camera**: gửi các tham số camera và một báo cáo trạng thái, **tự đặt tên bằng chữ** (ví dụ
+  trạng thái ống kính, thông số phơi sáng, hiệu ứng ảnh, và các mục nhiệt độ / khí áp / wifi). Nhờ tự
+  mô tả nên dễ đọc khi cần. Trường khí áp là một nguồn đo độ cao tiềm năng.
+- **Module cảm biến tốc độ cao**: luồng nhị phân thuần (khoảng 50 lần/giây), nhiều khả năng là dữ liệu
+  cảm biến quán tính / thị giác. Chưa giải mã nội dung — cần thí nghiệm có kiểm soát (che hoặc di
+  chuyển cảm biến) nên để lại giai đoạn sau.
+
+### 5.4. Đào sâu mã nguồn app (APK)
+
+Nhóm dịch ngược thêm các thư viện trong APK để hiểu phần còn lại của giao thức (hoàn toàn offline):
+- Làm rõ: các thư viện tên "iLink" thực chất là **đăng nhập tài khoản DJI qua cloud**, không phải kênh
+  liên lạc với drone. Phần dựng gói 9003 nằm trong thư viện lõi đã bị loại bỏ ký hiệu; vì nhóm đã dựng
+  lại được cấu trúc gói bằng thực nghiệm nên không cần đào tiếp hướng tốn công này.
+- Trích được **danh mục hơn 6000 "khả năng" (key) của SDK** — tức danh sách mọi thứ app đọc/điều khiển
+  được. Danh mục này **xác nhận chéo** các trường nhóm đã giải mã (SDK có đúng các mục "quaternion
+  gimbal", "quaternion hướng drone", "hướng la bàn", "điện áp pin", "app xin khung hình"), và vạch ra
+  **lộ trình điều khiển bay** cho giai đoạn sau: nhóm lệnh cần điều khiển ảo (virtual joystick), cất/hạ
+  cánh, bay về nhà, và điều khiển gimbal. Chi tiết trong `notes/apk-key-catalog.md`.
+
+---
+
+## 6. Những nhận định ban đầu đã được điều chỉnh
 
 Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai và đã được sửa lại. Ghi lại ở đây
 để minh bạch:
@@ -372,13 +422,16 @@ Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai 
 
 ---
 
-## 6. Hạn chế
+## 7. Hạn chế
 
 - Mới chỉ quan sát lúc drone **đứng yên dưới đất, động cơ tắt; chưa có thao tác điều khiển bay**, nên
   chưa thấy các lệnh điều khiển và chưa xác nhận được các trường GPS / độ cao / vận tốc.
 - Lệnh xin keyframe đã được mã nguồn app xác nhận nhưng **chưa gửi thử tới drone** để chốt 100% và
   biết lệnh nào trong cặp là bắt buộc.
-- Các module `0x92`, `0x28` và phần lớn lệnh telemetry còn lại chưa được gán ý nghĩa.
+- **Module cảm biến tốc độ cao (`0x92`) chưa giải mã được nội dung** (luồng nhị phân, cần thí nghiệm
+  có kiểm soát). Module camera (`0x28`) đã định danh nhưng chưa map từng trường.
+- Thư viện đọc telemetry đã kiểm thử trên **file đã bắt**, chưa chạy thử trên **UDP trực tiếp** từ drone.
+- Nhiệt độ pin đọc được nhưng **đơn vị chưa chốt** (ước lượng 0,1°C).
 - Một số byte trong header (byte 16–31 của kênh điều khiển, byte 16–19 của kênh video) chưa giải
   được.
 - Các góc đo trong thí nghiệm nghiêng bằng tay chỉ **gần đúng** (giữ tay không hoàn toàn cân), nhưng
@@ -390,19 +443,19 @@ Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai 
 
 ---
 
-## 7. Hướng tiếp theo
+## 8. Hướng tiếp theo
 
-Các việc chính của Ngày 3–5 đã hoàn tất: hiểu cấu trúc gói, giải mã video, gắn tên trường telemetry
-(pin, gimbal, hướng drone), xác định lệnh xin keyframe và viết dissector. Việc tiếp theo:
+Toàn bộ phần phân tích **không cần bay** đã hoàn tất: hiểu cấu trúc gói, giải mã video, gắn tên trường
+telemetry (pin đầy đủ, gimbal, hướng drone), định danh module, viết dissector, thư viện đọc telemetry,
+và trích danh mục khả năng SDK. Các việc tiếp theo hầu hết cần drone bật hoặc bay:
 
 1. **Gửi thử lệnh xin keyframe** tới drone để chốt cơ chế và biết lệnh nào trong cặp là bắt buộc —
    đây sẽ là lần đầu gửi gói chủ động tới drone (rủi ro thấp: drone vẫn dưới đất, chỉ là lệnh video).
-2. **Bắt gói khi điều khiển bay** (cất cánh, di chuyển, hạ cánh) để tìm lệnh điều khiển từ app, và
-   xác nhận các trường GPS / độ cao / vận tốc trong gói OSD.
-3. **PoC đọc telemetry trực tiếp**: tự mở kết nối UDP tới drone, đọc pin / góc / hướng mà không cần
-   DJI Fly — dựa trên các trường đã gắn tên.
+2. **Chạy thư viện đọc telemetry trên UDP trực tiếp** từ drone (thay nguồn file bằng socket).
+3. **Bắt gói khi điều khiển bay** (cất cánh, di chuyển, hạ cánh) để tìm lệnh điều khiển từ app (đối
+   chiếu nhóm "virtual joystick" trong danh mục SDK), và xác nhận các trường GPS / độ cao / vận tốc.
 4. **PoC nhận video độc lập**: tự nhận và giải mã luồng H.265, dùng lệnh xin keyframe để có hình ngay.
-5. Giải nghĩa nốt các module telemetry còn lại (`0x92`, `0x28`) và các byte header chưa rõ.
+5. **Giải mã luồng cảm biến tốc độ cao (`0x92`)** bằng thí nghiệm có kiểm soát (che/di chuyển cảm biến).
 
 ---
 
@@ -417,7 +470,9 @@ Các script nằm trong thư mục `poc/` của repo, chỉ dùng thư viện ch
 | `poc/extract_video.py` | Ghép luồng video từ pcap thành file `.h265` (có thể mượn bộ tham số từ file khác) |
 | `poc/keyframe_events.py` | Liệt kê các lần xin keyframe và các lần video khởi động lại theo thời gian |
 | `poc/gimbal_field.py` | Dò trường góc gimbal từ các mốc nghiêng camera |
+| `poc/neo2_telemetry.py` | **Thư viện đọc telemetry**: giải mã gói → sự kiện có tên (pin, gimbal, hướng drone, keyframe). Dùng cho cả file pcap lẫn UDP trực tiếp. |
 | `tools/dji-dissectors/dji-neo2-udp.lua` | Dissector Wireshark cho giao thức Neo 2 (nạp qua `init.lua`) |
+| `notes/apk-key-catalog.md`, `notes/apk-sdk-keys.txt` | Danh mục khả năng (key) của SDK trích từ APK |
 
 Ví dụ giải mã video từ một bản ghi giữa phiên:
 
@@ -425,6 +480,13 @@ Ví dụ giải mã video từ một bản ghi giữa phiên:
 python poc/extract_video.py captures/cap_01_connect.pcap captures/cap_01.h265
 python poc/extract_video.py captures/cap_04_battery_drain.pcap captures/cap_04.h265 --params captures/cap_01.h265
 ffmpeg -flags2 +showall -err_detect ignore_err -i captures/cap_04.h265 cap_04.mp4
+```
+
+Ví dụ đọc telemetry từ một bản ghi:
+
+```
+python poc/neo2_telemetry.py captures/cap_08_attitude.pcap --only drone_state
+python poc/neo2_telemetry.py captures/cap_04_battery_drain.pcap --only battery
 ```
 
 Nhật ký chi tiết từng bước (kể cả các mốc thời gian gốc và những lần thử sai) nằm trong
