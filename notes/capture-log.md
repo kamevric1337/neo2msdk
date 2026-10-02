@@ -463,3 +463,15 @@ tự hiện trong Wireshark, KHÔNG cần thêm code.
 | Drone pitch | 0x03→0x0e 0x03/0x43 | [24:26] i16 | 0.1° | cap_08 |
 | Drone roll | 0x03→0x0e 0x03/0x43 | [26:28] i16 | 0.1° | cap_08 |
 | Drone yaw | 0x03→0x0e 0x03/0x43 | [28:30] i16 | 0.1° | cap_08 |
+
+## Ngày 6 — PoC đọc telemetry
+Script: `poc/neo2_telemetry.py` — thư viện độc lập (stdlib) giải mã gói 9003 thành sự kiện có tên.
+API: `iter_pcap(path)` (đọc pcap) và `decode_udp_payload(bytes)` (dùng chung cho UDP trực tiếp sau
+này). Sự kiện: `Battery`, `GimbalAttitude` (pitch + quaternion), `DroneState` (pitch/roll/yaw +
+độ cao/vận tốc theo OSD chuẩn — độ cao/vận tốc CHƯA kiểm chứng khi bay), `KeyframeRequest`.
+Kiểm thử chéo trên các bản ghi đã có, khớp 100% với kết quả phân tích thủ công:
+- cap_08: drone pitch +33° khi chúc mũi, yaw/roll đúng; độ cao/vận tốc = 0 (dưới đất).
+- cap_07: gimbal -90° khi xuống hết cỡ.
+- cap_05: 3 lần KeyframeRequest "XIN I-FRAME" đúng 3 mốc thao tác.
+- cap_04: Battery 78%→... suốt 23 phút (1372 sự kiện pin).
+Đây là nền tảng cho PoC "đọc telemetry trực tiếp": chỉ cần thay nguồn từ pcap sang socket UDP.
