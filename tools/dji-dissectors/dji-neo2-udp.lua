@@ -38,10 +38,11 @@ local f_cmdset   = ProtoField.uint8("dji_neo2.cmd_set", "Cmd set", base.HEX)
 local f_cmdid    = ProtoField.uint8("dji_neo2.cmd_id", "Cmd id", base.HEX)
 local f_battery  = ProtoField.uint8("dji_neo2.battery_pct", "Battery %", base.DEC)
 local f_keyframe = ProtoField.bool("dji_neo2.keyframe_request", "App I-frame request")
+local f_gpitch   = ProtoField.int16("dji_neo2.gimbal_pitch_ddeg", "Gimbal pitch (0.1 deg)", base.DEC)
 
 p_neo2.fields = {
     f_len, f_flag8000, f_session, f_vseq, f_channel, f_chksum, f_chk_ok, f_ack,
-    f_vpayload, f_frame, f_src, f_dst, f_cmdset, f_cmdid, f_battery, f_keyframe,
+    f_vpayload, f_frame, f_src, f_dst, f_cmdset, f_cmdid, f_battery, f_keyframe, f_gpitch,
 }
 
 -- Bảng tên module/cmd_set mượn từ dji-dumlv1-proto.lua nếu đã nạp.
@@ -94,6 +95,11 @@ local function dissect_frame(tvb, off, pinfo, tree, depth)
     if src == 0x0b and cset == 0x0d and cid == 0x02 and flen >= 11 + 21 + 2 then
         sub:add(f_battery, tvb(off + 11 + 20, 1)):append_text(" (pin -> app)")
         pinfo.cols.info:append(string.format(" [BAT %d%%]", tvb(off + 11 + 20, 1):uint()))
+    end
+    -- Gimbal pitch: src=0x04 set=0x04 id=0x05, payload[0:2] i16 LE = pitch (0.1 độ). Xem cap_06.
+    if src == 0x04 and cset == 0x04 and cid == 0x05 and flen >= 11 + 2 + 2 then
+        local dd = tvb(off + 11, 2):le_int()
+        sub:add(f_gpitch, tvb(off + 11, 2)):append_text(string.format(" = %.1f°", dd / 10))
     end
     -- Xin keyframe: 0x02->0x09 set=0x01 id=0x01, payload[5] bit 0x20 bật = xin.
     if src == 0x02 and dst == 0x09 and cset == 0x01 and cid == 0x01 and flen >= 11 + 6 + 2 then

@@ -352,3 +352,64 @@ Kiểm chứng trên file lớn (cap_04, 1.23 GB): dissector đọc đúng `dji_
 điệu 67→66→65→64→63→62 theo số frame tăng, khớp kết quả Python. Checksum: 0 gói sai thật trên
 cap_02 (con số "1" khi đếm trước đó là dòng "debug: Tools Menu Handler" lọt vào stdout, không phải
 gói). Kết luận: toàn bộ gói 9003 có checksum XOR hợp lệ — dissector dùng được cho cả lab.
+
+# Ngày 5
+
+## cap_06_gimbal.pcap
+- Mục tiêu: tìm trường góc nghiêng gimbal (pitch) trong telemetry bằng phương pháp thay đổi có
+  kiểm soát (như tìm trường pin). Drone đặt yên dưới đất, KHÔNG cất cánh, động cơ tắt.
+- Bắt đầu ghi: 2026-10-02, tcpdump PID 8834, `/sdcard/cap_06_gimbal.pcap`. DJI Fly đã kết nối.
+- Mốc thao tác (giờ điện thoại):
+  - Bước 1 (gimbal NẰM NGANG 0°, giữ ~10s): 16:08:15
+  - Bước 2 (gimbal XUỐNG hết cỡ, giữ ~10s): 16:09:16
+  - Bước 3 (gimbal LÊN hết cỡ, giữ ~10s): 16:09:45
+  - Bước 4 (gimbal về NẰM NGANG 0°, giữ ~10s): 16:10:11
+- Dừng ghi: 16:10:19 (SIGINT). File ~330 MB, đã kéo về `captures/cap_06_gimbal.pcap`.
+- Kỳ vọng: một trường i16 LE trong telemetry gimbal (nghi src=0x04) hoặc FC bám theo pitch:
+  ~0 ở bước 1 & 4, âm lớn (hoặc dương) ở bước 2 (xuống), ngược dấu ở bước 3 (lên). Độ trễ app
+  ~4-5s như thí nghiệm pin.
+
+### Kết quả phân tích cap_06: ĐÃ TÌM RA trường góc gimbal (pitch)
+Script: `poc/gimbal_field.py` (+ phân tích quaternion). Drone nằm yên dưới đất cả buổi → mọi field
+đổi giá trị giữa 4 cửa sổ giữ yên đều do gimbal. Phương pháp: field phải PHẲNG trong mỗi lần giữ,
+KHÁC nhau giữa các lần (tỉ lệ biên độ/nhiễu cao).
+
+**Frame gimbal: `src=0x04 (Gimbal) → dst=0x02 (App)`, `cmd_set=0x04`, `cmd_id=0x05`, payload 50 byte.**
+Hai trường bám theo góc, xác nhận chéo lẫn nhau:
+
+1. **payload[0:2] = i16 LE = pitch gimbal, đơn vị 0.1° (decidegree).**
+   - B1 ngang=0 (0.0°) · B2 xuống=-728 (-72.8°) · B3 lên=+1024 (+102.4°) · B4 ngang=0 (0.0°).
+   - Dấu: âm = chúc xuống, dương = ngẩng lên. Về đúng 0 khi để ngang (cả 2 lần).
+
+2. **payload[24:40] = quaternion hướng camera (w,x,y,z, mỗi số float32 LE).** |q|=1.000 cả 4 bước.
+   - B1/B4 ngang: (0.787, 0, 0, -0.618) trùng khít nhau → pitch Euler = -0.0°.
+   - B2 xuống: pitch = -72.8° (khớp chính xác trường (1)).
+   - B3 lên: Euler cho +77.6° kèm roll 180° (gấp Euler) → tức pitch thực 180-77.6 = 102.4°, khớp
+     trường (1) = +1024. Thành phần z≈-0.617 không đổi ở 2 mốc ngang = hướng mũi drone (yaw cố định
+     ~-76°, hợp lý vì drone không xoay).
+
+Đối chiếu độ trễ: giá trị telemetry trên dây phản ánh góc gần như tức thời (đọc trực tiếp, không
+qua hiển thị app), nên không có độ trễ ~5s như thí nghiệm pin (độ trễ pin là do app cập nhật số).
+
+Các field "cùng dấu ở cả xuống và lên" (vd. 0x04/0x05 off=9 = 0/16384/16384/0) là cờ "gimbal lệch
+khỏi vị trí giữa", không phải góc có dấu.
+
+- [x] Gán trường gimbal pitch (việc Ngày 5) — xong, xác nhận bằng 2 trường độc lập.
+- [ ] Gán trường hướng drone (yaw/pitch/roll IMU) — xoay drone bằng tay khi tắt động cơ (chưa làm).
+
+## cap_07_gimbal2.pcap — lặp lại cap_06 để xác nhận trường gimbal
+- Bắt đầu ghi: 2026-10-02 16:18:51, tcpdump PID 9492, `/sdcard/cap_07_gimbal2.pcap`. Drone yên dưới đất.
+- Mốc thao tác (giờ điện thoại):
+  - Bước 1 (gimbal NẰM NGANG 0°): 16:19:25
+  - Bước 2 (gimbal XUỐNG hết cỡ): 16:19:58
+  - Bước 3 (gimbal LÊN hết cỡ): 16:20:31
+  - Bước 4 (gimbal về NẰM NGANG 0°): 16:21:06
+- Dừng ghi: ~16:21:08 (SIGINT). File ~119 MB, đã kéo về `captures/cap_07_gimbal2.pcap`.
+- **XÁC NHẬN LẠI trường gimbal** (cả payload[0:2] i16 0.1° và quaternion payload[24:40] khớp nhau
+  tuyệt đối ở cả 4 mốc):
+  - B1 ngang: -0.1° · B2 xuống: **-90.0°** (tròn, hết tầm) · B3 lên: **+70.0°** · B4 ngang: -0.5°.
+  - Lần này gimbal lên chỉ +70° nên Euler không bị gấp như cap_06 → quaternion và i16 trùng khít.
+  - Kết luận chắc chắn: `0x04→0x02 set=0x04 id=0x05`, payload[0:2] = pitch (0.1°), payload[24:40]
+    = quaternion hướng camera. Tầm pitch gimbal quan sát: khoảng -90° (chúc thẳng xuống) đến +70..+102°.
+- Dissector `dji-neo2-udp.lua` đã thêm trường `dji_neo2.gimbal_pitch_ddeg`; tshark đọc đúng ở các
+  cửa sổ giữ yên (lúc gimbal đang quay nhanh thì hiện giá trị quá độ, bình thường).
