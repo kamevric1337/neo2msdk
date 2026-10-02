@@ -335,3 +335,15 @@ Công cụ: giải nén .so từ APK + đọc chuỗi (strings) + disassemble AR
 
 (Ghi chú: `libdatajar.so` 205 MB là ELF bọc nhiều tài nguyên nén, không phải dex; tên lớp Kotlin
 `com/mtmd/video/stream/GDRIFrame`, `uav/sdk/keyvalue/value/camera/IFrameInfo` nằm trong đó.)
+
+### Dissector Wireshark cho giao thức Neo 2 (Việc 4, Ngày 4)
+File: `tools/dji-dissectors/dji-neo2-udp.lua`. Đăng ký trên `udp.port == 9003`, đã thêm dòng
+`dofile('dji-neo2-udp.lua')` vào `%APPDATA%\Wireshark\plugins\init.lua` (nạp sau dji-dumlv1-proto).
+Giải mã: header ngoài (độ dài, ID phiên, seq video, loại kênh, checksum XOR + cờ hợp lệ, ACK),
+đi theo frame DUML kể cả frame lồng trong tunnel 0x51/0x01 (đệ quy, kiểm CRC8 để tìm biên), và
+gọi lại `dji_dumlv1_main_dissector` cho chi tiết từng frame. Chú thích 2 trường đã kiểm chứng:
+`dji_neo2.battery_pct` và `dji_neo2.keyframe_request`.
+Kiểm thử bằng tshark trên cap_02/cap_05: 0 lỗi dissector, phân bố kênh khớp khảo sát Python
+(cap_02: 1324 kênh 0x01, 17075 video, 957 kênh 0x04), 3 lần keyframe_request==1 ở cap_05 đúng
+3 mốc thao tác. Bộ lọc hữu ích: `dji_neo2.keyframe_request==1`, `dji_neo2.battery_pct`,
+`dji_neo2.checksum_ok==0`, `dji_neo2.channel==2`.
