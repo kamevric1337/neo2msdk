@@ -347,3 +347,8 @@ Kiểm thử bằng tshark trên cap_02/cap_05: 0 lỗi dissector, phân bố k�
 (cap_02: 1324 kênh 0x01, 17075 video, 957 kênh 0x04), 3 lần keyframe_request==1 ở cap_05 đúng
 3 mốc thao tác. Bộ lọc hữu ích: `dji_neo2.keyframe_request==1`, `dji_neo2.battery_pct`,
 `dji_neo2.checksum_ok==0`, `dji_neo2.channel==2`.
+
+Kiểm chứng trên file lớn (cap_04, 1.23 GB): dissector đọc đúng `dji_neo2.battery_pct`, giảm đơn
+điệu 67→66→65→64→63→62 theo số frame tăng, khớp kết quả Python. Checksum: 0 gói sai thật trên
+cap_02 (con số "1" khi đếm trước đó là dòng "debug: Tools Menu Handler" lọt vào stdout, không phải
+gói). Kết luận: toàn bộ gói 9003 có checksum XOR hợp lệ — dissector dùng được cho cả lab.
