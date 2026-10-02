@@ -475,3 +475,47 @@ Kiểm thử chéo trên các bản ghi đã có, khớp 100% với kết quả 
 - cap_05: 3 lần KeyframeRequest "XIN I-FRAME" đúng 3 mốc thao tác.
 - cap_04: Battery 78%→... suốt 23 phút (1372 sự kiện pin).
 Đây là nền tảng cho PoC "đọc telemetry trực tiếp": chỉ cần thay nguồn từ pcap sang socket UDP.
+
+## Ngày 6 (tiếp) — giải mã trường pin đầy đủ + định danh module 0x92 / 0x28
+
+### Trường pin: "Battery Dynamic Data" (layout chuẩn DJI + 1 byte đầu)
+Frame `0x0b→0x02 set 0x0d id 0x02`, payload 44 byte. Khớp struct `battery_dynamic_data` của
+`dji-dumlv1-proto.lua` nhưng **lệch 1 byte** (chỉ có 1 byte unknown đầu thay vì 2). Đã kiểm chứng
+trên 23 phút xả của cap_04 — mọi trường nhất quán, hợp lý vật lý:
+
+| Trường | Offset (payload) | Kiểu | Diễn biến cap_04 |
+|---|---|---|---|
+| Điện áp pack (mV) | [1:5] | u32 LE | 8099 → 7751 (giảm đều) |
+| Dòng (mA) | [5:9] | i32 LE | -634 → -679 (âm = xả) |
+| Dung lượng đầy (mAh) | [9:13] | u32 LE | 1639 (cố định) |
+| Dung lượng còn (mAh) | [13:17] | u32 LE | 1289 → 1032 (giảm đều) |
+| Nhiệt độ (≈0.1°C, tạm) | [17:19] | u16 LE | 461 → 512 (tăng khi dùng) |
+| Số cell | [19] | u8 | 2 (pin 2S) |
+| **SOC (%)** | [20] | u8 | 78 → 63 (khớp % đã theo dõi) |
+| Status | [21:29] | u64 | cờ trạng thái (chưa giải) |
+| Version | [29] | u8 | 0x13 |
+
+Kiểm tra chéo: còn/đầy = 1289/1639 = 78.6% ≈ SOC 78%; 1032/1639 = 63% ≈ SOC 63%. → chắc chắn.
+Đã thêm tất cả vào `poc/neo2_telemetry.py` (sự kiện `Battery`).
+
+### Định danh module 0x92 và 0x28 (địa chỉ > 31, không có trong bảng DUML cũ)
+Hai module này gửi telemetry qua tunnel, trước đây chưa rõ. Khảo sát (cap_02/cap_08):
+
+**0x28 = module Camera + báo cáo cảm biến.** Tự mô tả bằng tên khóa dạng text:
+- Tham số camera: `cam_lens_state`, `cam_expo_param`, `cam_image_effect`, `pano_status`,
+  `cam_handheld_smart_info` (frame `set 0x00 id 0x99`, ~34 Hz).
+- Báo cáo trạng thái định kỳ (`set 0x00 id 0x10`, len 242): `temperature`, `temperature_group`,
+  `baro`, `nand`, `wifi`, `sens` — dạng text "[temperature]: ... baro: 497 ...". `baro` đổi 497–502
+  → số đo khí áp (nguồn độ cao tiềm năng).
+→ Vì tự đặt tên khóa, module này dễ parse theo kiểu key-value khi cần.
+
+**0x92 = luồng cảm biến/nhận thức tốc độ cao (chưa giải mã).** KHÔNG có chuỗi text, thuần nhị phân:
+- `set 0x23 id 0xb2`: 50 Hz, 43 byte cố định (trường dao động mạnh thấy ở cap_06 — nghi IMU thô
+  hoặc optical-flow).
+- Nhiều luồng 10 Hz: `set 0x0a id 0x5a/0xbc`, `set 0x22 id 0x21`, `set 0x24 id 0x71`, `set 0x23 id 0x14`…
+→ Nhiều khả năng là bộ xử lý thị giác/cảm biến của Neo (có cảm biến hướng xuống). Giải mã chi tiết
+cần thí nghiệm có kiểm soát (che/di chuyển cảm biến) — để sau.
+
+- [x] Giải mã trường pin đầy đủ (điện áp/dòng/dung lượng/nhiệt độ/cell) — xong, kiểm chứng cap_04.
+- [x] Định danh module 0x28 (camera) và 0x92 (cảm biến tốc độ cao) — xong ở mức định danh.
+- [ ] Giải mã nội dung nhị phân của 0x92 — cần thí nghiệm có kiểm soát (sau).

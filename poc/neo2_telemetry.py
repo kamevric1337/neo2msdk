@@ -71,10 +71,18 @@ def crc16(data, crc=0x3692):
 # ---------------------------------------------------------------------------
 @dataclass
 class Battery:
-    percent: int
+    percent: int              # state of charge (%)
+    voltage_mv: int           # điện áp cả pack (mV)
+    current_ma: int           # dòng (mA); âm = đang xả
+    remain_mah: int           # dung lượng còn lại (mAh)
+    full_mah: int             # dung lượng sạc đầy (mAh)
+    cells: int                # số cell nối tiếp (Neo 2: 2)
+    temp_raw: int             # nhiệt độ thô (≈ 0.1°C, chưa chốt đơn vị)
 
     def __str__(self):
-        return f"Battery        {self.percent:3d}%"
+        return (f"Battery        {self.percent:3d}%  {self.voltage_mv/1000:.3f}V "
+                f"{self.current_ma:+5d}mA  {self.remain_mah}/{self.full_mah}mAh "
+                f"{self.cells}S  {self.temp_raw/10:.1f}°C")
 
 
 @dataclass
@@ -129,9 +137,17 @@ def _quat_pitch(w, x, y, z):
 
 
 def decode_frame(src, dst, cmd_set, cmd_id, payload):
-    # Pin: module pin -> app
-    if src == 0x0B and cmd_set == 0x0D and cmd_id == 0x02 and len(payload) > 20:
-        return Battery(payload[20])
+    # Pin: module pin -> app (Battery Dynamic Data, layout chuẩn DJI + 1 byte đầu).
+    # Kiểm chứng trên cap_04 (23 phút x, mọi trường nhất quán). Xem notes/capture-log.md.
+    if src == 0x0B and cmd_set == 0x0D and cmd_id == 0x02 and len(payload) >= 30:
+        voltage = struct.unpack_from("<I", payload, 1)[0]
+        current = struct.unpack_from("<i", payload, 5)[0]
+        full = struct.unpack_from("<I", payload, 9)[0]
+        remain = struct.unpack_from("<I", payload, 13)[0]
+        temp = struct.unpack_from("<H", payload, 17)[0]
+        cells = payload[19]
+        soc = payload[20]
+        return Battery(soc, voltage, current, remain, full, cells, temp)
 
     # Gimbal: gimbal -> app
     if src == 0x04 and cmd_set == 0x04 and cmd_id == 0x05 and len(payload) >= 40:
