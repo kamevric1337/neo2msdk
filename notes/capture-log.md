@@ -146,7 +146,9 @@ Script: `poc/find_battery_field.py` (stdlib, ~50s cho file 1.23 GB).
 - Cách parse đúng: quét mọi `0x55`, nhận frame khi qua CRC8 header (init 0x77, poly 0x8C
   reflected) và CRC16 (init 0x3692, poly 0x8408 reflected). Trên 30k gói nhỏ: 76 245 frame qua
   cả 2 CRC, chỉ 107 qua CRC8 mà trượt CRC16 → tiêu chí rất sạch.
-- Frame DUML hợp lệ xuất hiện cả trong các gói lớn (~859k gói có ≥1 frame), không chỉ gói < 200 byte.
+- Frame DUML hợp lệ xuất hiện cả trong một số gói lớn của kênh điều khiển (vd. cap_02: 578/17180
+  gói lớn drone→app), không chỉ gói < 200 byte. (Bản trước ghi "~859k gói có ≥1 frame" là SAI —
+  859 516 là tổng số gói > 34 byte được quét, không phải số gói có frame.)
 
 **Trường % pin** (khớp cả 2 mốc chính xác, giảm đơn điệu 78→62, đổi đúng 16 lần):
 1. `src=0x0b (pin) → dst=0x02 (app)`, `cmd_set=0x0d`, `cmd_id=0x02`, payload dài 44 byte,
@@ -254,3 +256,45 @@ Nhận định cũ "byte 6-7 là sequence" là SAI — byte 6 là loại kênh, 
   - cap_02: 905/905 khung (khớp đúng 905 TRAIL_R đếm được), 2 chỗ nhảy seq.
   - cap_04: 41 442 khung trong ~1382s (13:16:54.8 → 13:39:56.7) = 30.0 fps, giải mã hết cả capture
     23 phút chỉ với bộ tham số mượn từ cap_01. 55 chỗ nhảy seq trong 782 326 gói video.
+
+# Ngày 4
+
+## cap_05_keyframe.pcap
+- Mục tiêu: tìm lệnh DUML app gửi để yêu cầu keyframe (IDR) — đối chiếu lệnh app→drone ngay trước
+  mỗi lần VPS/SPS/PPS + IDR xuất hiện với giai đoạn bình thường.
+- Bắt đầu ghi: 2026-10-02 14:15:22 (giờ điện thoại), tcpdump PID 29992,
+  `/sdcard/cap_05_keyframe.pcap`. DJI Fly đã kết nối Neo 2 và đang xem video từ trước.
+- Mốc thao tác (giờ điện thoại):
+  - Bước 1 (nền, không thao tác): 14:15:22 → 14:16:46 (~84s, dài hơn 30s dự kiến — không sao,
+    nền dài hơn càng tốt). Người dùng nhắn lúc 14:16:46.
+  - Bước 2 (Home, DJI Fly ra nền): người dùng nhắn "2" lúc 14:17:11.
+  - Bước 3 (mở lại DJI Fly, video hiện lại): người dùng nhắn "3" lúc 14:17:35.
+  - Bước 4 (Album rồi quay lại camera, video hiện lại): người dùng nhắn "4" lúc 14:17:57.
+  - Bước 5 (Home ~10s rồi mở lại, video hiện lại): người dùng nhắn "5" lúc 14:18:31.
+- Dừng ghi: 14:18:37 (SIGINT), ~6s sau bước 5. File ~164 MB, đã kéo về `captures/cap_05_keyframe.pcap`.
+
+### Kết quả phân tích cap_05: lệnh xin keyframe (ứng viên rất mạnh, CHƯA thử chủ động)
+Script: `poc/keyframe_events.py`. ID phiên giữ nguyên `0xd54c` suốt capture (ra nền / Album KHÔNG
+làm app nối lại). Video chỉ ngắt khi vào Album (14:17:45.26 → 14:17:52.07, 6.8s); lúc app ra nền
+drone vẫn gửi video bình thường.
+
+Ba lần VPS + IDR, khớp bước 3/4/5 (người dùng báo trễ ~5s, giống thí nghiệm pin):
+14:17:29.977 · 14:17:52.065 · 14:18:25.620. Trong nền (14:15:22–14:17:11, 109s) không có cái nào.
+
+Trước mỗi lần, app gửi một **cặp lệnh cùng seq DUML** — cả hai đều KHÔNG xuất hiện trong nền:
+1. `0x02→0xe9 set 0x18 id 0x47` (gửi thẳng, ngoài tunnel), payload 10 byte
+   `00 08 [b2 b3 b4] 00 [cờ] 00 00 00` — b2..b4 (u24 LE) tăng ~1/ms → nghi là bộ đếm thời gian;
+   cờ = `01` (xin) / `00`.
+2. `0x02→0x09 set 0x01 id 0x01` (trong tunnel), payload 11 byte `00 00 00 00 00 [X] 00 00 00 [X] 00`,
+   X = `0x24` khi cờ = 01, `0x04` khi cờ = 00 → **bit 0x20 nghi là "xin keyframe"**.
+- Module `0x09` trả ACK `0x09→0x02 set 0x01 id 0x01 attr 0x80`, payload `00` (OK).
+- App gửi từng loạt: 1–3 cặp X=0x24 rồi vài cặp X=0x04, cách nhau ~50 ms, sau đó ngừng.
+- 5/5 loạt X=0x24 (3 ở cap_05, 2 ở cap_01 lúc nối lại) đều được đáp bằng VPS+IDR sau 0.01–0.7s.
+  Ở cap_05 bước 4 (Album), VPS tới 0.67s sau, đúng lúc video chạy lại sau khi bị ngắt.
+- Lưu ý: lúc mở phiên (cap_01, 13:13:51.75) drone TỰ gửi VPS trước khi app xin; trong lúc nối lại
+  cũng có vài VPS không đi sau X=0x24 → drone có thể tự gửi keyframe lúc khởi động luồng.
+- Chưa biết lệnh nào trong cặp thật sự kích hoạt keyframe, hay phải có cả hai. Module `0x09` nghi
+  là bộ mã hóa video / truyền hình; `0xe9` là đầu tunnel phía drone.
+- **Bước kiểm chứng cần làm:** tự gửi lại (replay) cặp lệnh với X=0x24 khi đang xem video giữa
+  phiên, xem drone có gửi VPS+IDR không; thử riêng từng lệnh. Cần tự dựng header ngoài 34 byte
+  (ID phiên, checksum XOR, độ dài), seq DUML mới và CRC — đây là lần đầu GỬI gói tới drone.
