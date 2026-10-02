@@ -1,7 +1,7 @@
 # Báo cáo tiến độ: Phân tích giao thức DJI Fly ↔ DJI Neo 2 qua Wi-Fi
 
-**Giai đoạn:** Phase 1 – PoC, Ngày 3 (bắt gói và phân tích lưu lượng)
-**Thời gian thực hiện:** 29/09/2026
+**Giai đoạn:** Phase 1 – PoC, Ngày 3–5 (bắt gói, phân tích lưu lượng, gắn tên trường telemetry)
+**Thời gian thực hiện:** 29/09/2026 – 02/10/2026
 **Người thực hiện:** _(điền tên)_
 
 ---
@@ -91,14 +91,28 @@ Phần này giải thích các thuật ngữ kỹ thuật dùng trong báo cáo,
 |---|---|
 | **V / mA / mAh** | Vôn (điện áp), mili-ampe (dòng điện), mili-ampe-giờ (dung lượng pin). |
 
+### Hướng và cảm biến (Ngày 5)
+
+| Thuật ngữ | Giải thích |
+|---|---|
+| **Telemetry** | Dữ liệu trạng thái drone gửi liên tục về app: pin, độ cao, hướng, góc gimbal… |
+| **IMU** | Cảm biến quán tính trong drone (con quay hồi chuyển + gia tốc kế), đo được hướng nghiêng của thân drone. |
+| **Gimbal** | Cơ cấu giữ camera cho hình ổn định. Gimbal của Neo 2 nghiêng được theo trục lên–xuống (pitch). |
+| **Pitch / Roll / Yaw** | Ba góc mô tả hướng của một vật thể. *Pitch* = chúc lên/xuống (gật đầu), *Roll* = nghiêng trái/phải (lắc vai), *Yaw* = xoay ngang (quay đầu). |
+| **Quaternion** | Cách biểu diễn hướng trong không gian bằng 4 số, tránh được lỗi "khóa khớp" của góc Euler. Một quaternion đơn vị có tổng bình phương 4 số bằng 1. |
+| **Góc Euler** | Biểu diễn hướng bằng 3 góc pitch/roll/yaw quen thuộc; chuyển đổi được qua lại với quaternion. |
+| **Decidegree (0.1°)** | Đơn vị góc bằng một phần mười độ. Giá trị 450 nghĩa là 45,0°. DJI hay lưu góc dưới dạng số nguyên theo đơn vị này. |
+| **OSD** | *On-Screen Display*: gói dữ liệu trạng thái bay tiêu chuẩn của DJI (hướng, độ cao, vận tốc, GPS…), hiển thị chồng lên màn hình trong app. |
+| **Keyframe / I-frame** | Khung hình đầy đủ, giải mã được độc lập (xem nhóm Video). "Xin keyframe" = app yêu cầu drone gửi ngay một khung đầy đủ. |
+
 ---
 
 ## 1. Tóm tắt
 
 DJI Neo 2 hiện chưa được MSDK V5 chính thức hỗ trợ, nên nhóm chọn hướng tìm hiểu giao thức giữa app
-DJI Fly và drone để sau này tự xây một SDK riêng. Báo cáo này trình bày kết quả của ngày làm việc
-đầu tiên với dữ liệu thật: bắt gói trên điện thoại trong lúc app đang kết nối trực tiếp với drone qua
-Wi-Fi, sau đó phân tích offline.
+DJI Fly và drone để sau này tự xây một SDK riêng. Báo cáo này gộp kết quả ba ngày làm việc với dữ
+liệu thật: bắt gói trên điện thoại trong lúc app kết nối trực tiếp với drone qua Wi-Fi, rồi phân tích
+offline. Ngày 3 tập trung hiểu cấu trúc gói; Ngày 4–5 gắn tên ý nghĩa cho các trường dữ liệu.
 
 Các kết quả chính:
 
@@ -108,10 +122,12 @@ Các kết quả chính:
    tự video và ACK từ phía app.
 3. Bên trong kênh điều khiển là các **frame DUML** quen thuộc của DJI, phần lớn được **bọc trong một
    frame "tunnel"** (`cmd_set 0x51 / cmd_id 0x01`).
-4. **Đã xác định được trường phần trăm pin** trong telemetry, kiểm chứng bằng một thí nghiệm theo dõi
-   pin tụt trong 23 phút.
-5. **Luồng video là H.265 thô (960×720, 30 fps)**, đã ghép lại và giải mã ra hình bằng ffmpeg. Drone
+4. **Luồng video là H.265 thô (960×720, 30 fps)**, đã ghép lại và giải mã ra hình bằng ffmpeg. Drone
    không gửi keyframe định kỳ, điều này ảnh hưởng trực tiếp tới thiết kế phần nhận video của SDK.
+5. **Đã gắn tên được nhiều trường dữ liệu** bằng phương pháp thay đổi có kiểm soát: phần trăm pin,
+   lệnh app xin keyframe, góc nghiêng gimbal, và hướng thân drone (pitch/roll/yaw). Hướng drone dùng
+   **đúng định dạng OSD chuẩn của DJI**, nên các dòng drone cũ và Neo 2 chia sẻ cùng cấu trúc.
+6. Đã viết **bộ giải mã (dissector) cho Wireshark** để cả nhóm mở file bắt gói là đọc hiểu được ngay.
 
 ---
 
@@ -124,6 +140,11 @@ Các kết quả chính:
 | App | DJI Fly chính hãng, bản 1.21.10 (`dji.go.v5`) |
 | Công cụ bắt gói | `tcpdump` có sẵn trên điện thoại, chạy với quyền root trên `wlan0` |
 | Phân tích | Wireshark 4.6.8 + dissector DUML của cộng đồng (o-gs/dji-firmware-tools), script Python tự viết, ffmpeg 9.0.2 |
+| Đọc mã app (Ngày 4) | Giải nén APK, đọc chuỗi và dịch ngược thư viện bằng công cụ phân tích tĩnh (không gửi gì tới drone) |
+
+Tổng cộng tám bản ghi: `cap_01`/`cap_02` (kết nối, nhàn rỗi), `cap_04` (pin tụt 23 phút), `cap_05`
+(xin keyframe), `cap_06`/`cap_07` (gimbal, hai lần), `cap_08` (hướng drone). Mọi thí nghiệm Ngày 4–5
+đều thực hiện với **drone để yên dưới đất, động cơ tắt** — không cất cánh, không điều khiển bay.
 
 Mạng giữa điện thoại và drone là một mạng nội bộ `192.168.2.0/24`: drone ở `192.168.2.1`, điện thoại
 nhận `192.168.2.12`. Bắt gói ngay trên điện thoại giúp thấy được toàn bộ lưu lượng hai chiều mà
@@ -139,7 +160,7 @@ Ba bản ghi đã thực hiện:
 
 ---
 
-## 3. Kết quả
+## 3. Kết quả Ngày 3
 
 ### 3.1. Tổng quan lưu lượng
 
@@ -253,7 +274,91 @@ Wi-Fi lân cận để đo chính xác hơn.
 
 ---
 
-## 4. Những nhận định ban đầu đã được điều chỉnh
+## 4. Kết quả Ngày 4–5: gắn tên các trường telemetry
+
+Sau khi hiểu được cấu trúc gói (Ngày 3), nhóm chuyển sang **xác định ý nghĩa từng trường** trong
+dữ liệu drone gửi về. Phương pháp chung là **thay đổi có kiểm soát**: tạo ra một thay đổi vật lý đã
+biết (pin tụt, nghiêng camera, xoay drone), ghi lại mốc thời gian, rồi dò xem byte nào trong gói
+biến đổi khớp với thay đổi đó. Cách này không cần tài liệu của nhà sản xuất.
+
+### 4.1. Lệnh "xin keyframe" — để có hình ngay khi vào xem giữa chừng
+
+Ngày 3 cho thấy drone không gửi keyframe định kỳ, nên khi bắt đầu xem giữa phiên sẽ phải chờ hình
+hiện dần. Để tìm cách lấy hình ngay, nhóm ghi lại lúc app **ra nền rồi mở lại / vào Album rồi quay
+ra** — mỗi lần như vậy video phải khởi động lại và app buộc phải xin một khung hình mới.
+
+Kết quả: mỗi lần video khởi động lại, ngay trước đó app gửi một **cặp lệnh** mà lúc bình thường
+không hề xuất hiện:
+- một lệnh gửi thẳng tới bộ truyền hình của drone,
+- một lệnh kèm theo trong đó có một byte bật cờ "xin khung hình".
+
+Cặp lệnh này xuất hiện đúng trước cả 5 lần video khởi động lại và không lần nào xuất hiện trong lúc
+xem bình thường.
+
+**Đối chiếu với mã nguồn app (không gửi gì tới drone):** giải nén thư viện của DJI Fly và đọc các
+chuỗi ký tự trong đó, nhóm tìm thấy đúng hành động tên "app xin I-frame", một hàm gửi lệnh tương
+ứng, và một đoạn ghi log "xin khung hình quá nhanh" cho thấy app tự giới hạn số lần xin — khớp
+chính xác hành vi quan sát trên mạng. Vì vậy có thể khẳng định (không còn là suy đoán) rằng cặp
+lệnh tìm được chính là lệnh xin keyframe. Bước còn lại để chốt 100% là tự gửi thử lệnh này cho drone.
+
+### 4.2. Góc nghiêng camera (gimbal)
+
+Đặt drone yên dưới đất, nhóm nghiêng camera tới các vị trí rõ ràng (nằm ngang → chúc xuống hết cỡ →
+ngẩng lên hết cỡ → về ngang), giữ yên mỗi vị trí khoảng 10 giây và ghi mốc thời gian. Thí nghiệm
+được **lặp lại hai lần** để chắc chắn.
+
+Kết quả: trong gói dữ liệu của gimbal có hai trường cùng mô tả góc camera và **khớp nhau tuyệt đối**:
+- một số nguyên biểu thị góc nghiêng theo đơn vị 0,1 độ,
+- một bộ bốn số (quaternion) mô tả đầy đủ hướng camera.
+
+Ở cả hai lần ghi, hai vị trí "nằm ngang" đều cho giá trị gần như trùng khít, còn chúc xuống và ngẩng
+lên cho giá trị trái dấu rõ ràng. Tầm nghiêng quan sát được khoảng từ -90° (chúc thẳng xuống) đến
++70…+100° (ngẩng lên).
+
+### 4.3. Hướng của thân drone (pitch / roll / yaw)
+
+Vẫn để động cơ tắt, nhóm cầm cả thân drone và đổi **từng trục một** từ tư thế phẳng: xoay ngang 90°,
+chúc mũi xuống, nghiêng sang trái, rồi đặt phẳng lại. Mỗi thao tác chỉ tác động một trục nên tách
+được ba góc riêng biệt.
+
+Kết quả: hướng thân drone nằm trong gói "trạng thái bay" (OSD) của bộ điều khiển bay, gồm ba số
+nguyên liền nhau là **pitch, roll, yaw** (đơn vị 0,1 độ). Khi kiểm chứng, mỗi góc chỉ thay đổi mạnh
+đúng ở thao tác của trục đó, và trở về gần giá trị cũ khi đặt phẳng lại:
+
+| Thao tác | Pitch | Roll | Yaw |
+|---|---|---|---|
+| Phẳng (gốc) | ≈0° | ≈0° | -70° (hướng ban đầu) |
+| Xoay ngang 90° | ≈0° | ≈0° | **+29°** (đổi ≈99°) |
+| Chúc mũi xuống | **+34°** | ≈0° | ≈ giữ |
+| Nghiêng trái | ≈0° | **+43°** | ≈ giữ |
+| Phẳng lại | ≈0° | ≈0° | -67° (≈ gốc) |
+
+**Phát hiện quan trọng:** gói này theo **đúng định dạng OSD tiêu chuẩn của DJI** dùng chung cho các
+dòng drone trước. Điều đó có nghĩa là bộ giải mã có sẵn của cộng đồng tự đọc đúng các trường, và các
+dữ liệu khác trong cùng gói (GPS, độ cao, vận tốc) nhiều khả năng cũng theo chuẩn — sẽ xác nhận khi
+bay thật.
+
+### 4.4. Công cụ đọc gói cho cả nhóm (dissector Wireshark)
+
+Nhóm đã viết một bộ giải mã (dissector) cho Wireshark, tự động bóc tách header ngoài, đi theo các
+frame kể cả frame lồng trong tunnel, và chú thích sẵn các trường đã xác định (pin, lệnh keyframe,
+góc gimbal). Nhờ dùng chung định dạng DUML chuẩn, các góc pitch/roll/yaw của thân drone cũng tự hiện.
+Công cụ đã kiểm thử trên toàn bộ các bản ghi, không lỗi, và bất kỳ ai trong lab mở Wireshark là dùng
+được ngay. Một số bộ lọc tiện dụng: xem các lần xin keyframe, lọc gói pin, chỉ xem video, hoặc tìm
+gói có checksum sai.
+
+### 4.5. Bảng tổng hợp các trường đã xác định
+
+| Đại lượng | Nguồn gửi | Đơn vị | Cách xác nhận |
+|---|---|---|---|
+| Phần trăm pin | Module pin → app | % | Theo dõi pin tụt 23 phút (2 mốc chính xác) |
+| Lệnh xin keyframe | App → bộ truyền hình | cờ bật/tắt | 5/5 lần khớp + đối chiếu mã app |
+| Góc nghiêng gimbal | Gimbal → app | 0,1° (và quaternion) | 2 lần ghi, 2 trường khớp nhau |
+| Pitch / Roll / Yaw thân drone | Bộ điều khiển bay → app | 0,1° | Đổi từng trục một, mỗi trục khớp đúng |
+
+---
+
+## 5. Những nhận định ban đầu đã được điều chỉnh
 
 Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai và đã được sửa lại. Ghi lại ở đây
 để minh bạch:
@@ -267,13 +372,17 @@ Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai 
 
 ---
 
-## 5. Hạn chế
+## 6. Hạn chế
 
-- Mới chỉ quan sát lúc drone **đứng yên hoặc lơ lửng, chưa có thao tác điều khiển bay**, nên chưa
-  thấy các lệnh điều khiển.
-- Các module `0x92`, `0x28` và phần lớn lệnh telemetry chưa được gán ý nghĩa.
+- Mới chỉ quan sát lúc drone **đứng yên dưới đất, động cơ tắt; chưa có thao tác điều khiển bay**, nên
+  chưa thấy các lệnh điều khiển và chưa xác nhận được các trường GPS / độ cao / vận tốc.
+- Lệnh xin keyframe đã được mã nguồn app xác nhận nhưng **chưa gửi thử tới drone** để chốt 100% và
+  biết lệnh nào trong cặp là bắt buộc.
+- Các module `0x92`, `0x28` và phần lớn lệnh telemetry còn lại chưa được gán ý nghĩa.
 - Một số byte trong header (byte 16–31 của kênh điều khiển, byte 16–19 của kênh video) chưa giải
   được.
+- Các góc đo trong thí nghiệm nghiêng bằng tay chỉ **gần đúng** (giữ tay không hoàn toàn cân), nhưng
+  đủ để xác định vị trí và dấu của từng trường — là mục tiêu của các thí nghiệm này.
 - Tất cả kết quả đều từ **một drone, một điện thoại và một phiên bản app**. Chưa kiểm tra khi firmware
   hoặc app cập nhật.
 - Luồng video có khoảng 40 điểm bất thường nhỏ, nghi do mất gói quanh lúc kết nối lại, chưa kiểm
@@ -281,18 +390,19 @@ Trong quá trình phân tích, một số giả thuyết ban đầu tỏ ra sai 
 
 ---
 
-## 6. Hướng tiếp theo
+## 7. Hướng tiếp theo
 
-1. **Tìm lệnh yêu cầu keyframe** (quan trọng cho phần video của SDK): xem các lệnh app gửi lúc kết
-   nối lại, kết hợp dịch ngược APK.
-2. **Gán tên cho các lệnh telemetry**: đối chiếu với định nghĩa trong các dissector cộng đồng, và
-   dùng cùng phương pháp "thay đổi có kiểm soát" như với pin, ví dụ xoay gimbal để tìm trường góc
-   gimbal, hoặc di chuyển drone để tìm trường độ cao.
-3. **Bắt gói khi điều khiển bay** (cất cánh, di chuyển, hạ cánh) để tìm lệnh điều khiển từ app.
-4. Viết dissector Wireshark cho header bao ngoài và lớp tunnel, để các thành viên khác xem trực tiếp
-   trên Wireshark.
-5. Bắt đầu một PoC nhỏ: tự mở kết nối UDP tới drone, đọc telemetry pin và nhận video mà không cần
-   DJI Fly.
+Các việc chính của Ngày 3–5 đã hoàn tất: hiểu cấu trúc gói, giải mã video, gắn tên trường telemetry
+(pin, gimbal, hướng drone), xác định lệnh xin keyframe và viết dissector. Việc tiếp theo:
+
+1. **Gửi thử lệnh xin keyframe** tới drone để chốt cơ chế và biết lệnh nào trong cặp là bắt buộc —
+   đây sẽ là lần đầu gửi gói chủ động tới drone (rủi ro thấp: drone vẫn dưới đất, chỉ là lệnh video).
+2. **Bắt gói khi điều khiển bay** (cất cánh, di chuyển, hạ cánh) để tìm lệnh điều khiển từ app, và
+   xác nhận các trường GPS / độ cao / vận tốc trong gói OSD.
+3. **PoC đọc telemetry trực tiếp**: tự mở kết nối UDP tới drone, đọc pin / góc / hướng mà không cần
+   DJI Fly — dựa trên các trường đã gắn tên.
+4. **PoC nhận video độc lập**: tự nhận và giải mã luồng H.265, dùng lệnh xin keyframe để có hình ngay.
+5. Giải nghĩa nốt các module telemetry còn lại (`0x92`, `0x28`) và các byte header chưa rõ.
 
 ---
 
@@ -305,6 +415,9 @@ Các script nằm trong thư mục `poc/` của repo, chỉ dùng thư viện ch
 | `poc/duml_survey.py` | Thống kê cấu trúc gói: header, loại kênh, danh sách lệnh DUML, các khoảng gián đoạn |
 | `poc/find_battery_field.py` | Dò byte telemetry khớp với các mốc pin đã ghi |
 | `poc/extract_video.py` | Ghép luồng video từ pcap thành file `.h265` (có thể mượn bộ tham số từ file khác) |
+| `poc/keyframe_events.py` | Liệt kê các lần xin keyframe và các lần video khởi động lại theo thời gian |
+| `poc/gimbal_field.py` | Dò trường góc gimbal từ các mốc nghiêng camera |
+| `tools/dji-dissectors/dji-neo2-udp.lua` | Dissector Wireshark cho giao thức Neo 2 (nạp qua `init.lua`) |
 
 Ví dụ giải mã video từ một bản ghi giữa phiên:
 
