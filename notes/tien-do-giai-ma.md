@@ -221,6 +221,34 @@ trường GPS/độ cao/vận tốc 🟡 (suy theo chuẩn, dưới đất đề
 - Byte 20+: ✅ **H.265 thô, 960×720, 30 fps, KHÔNG mã hóa** — đã ghép và giải mã ra hình bằng ffmpeg.
 - Lưu ý: drone chỉ gửi keyframe lúc mở phiên / kết nối lại (không định kỳ).
 
+### 6.1. Vì sao video giải mã bị mờ đục, rõ dần (không nét ngay)
+
+Khi giải mã các bản ghi (vd. `demo_cap02.mp4`, lưới khung của cap_04), ảnh **bắt đầu mờ đục như sương
+rồi rõ dần sau ~20 giây**, chỗ có người thì nhận ra được còn nền thì phẳng lì. Nguyên nhân:
+
+**Trực tiếp (cơ chế ngay tại chỗ):**
+1. **Thiếu keyframe (I-frame).** Video nén gồm *keyframe* (ảnh đầy đủ, tự giải mã được) và *P-frame*
+   (chỉ lưu phần thay đổi so với khung trước). Các bản ghi này bắt **vào giữa phiên**, không có
+   keyframe nào → bộ giải mã phải khởi đầu từ **nền xám sai** rồi cộng dồn P-frame lên → lớp mờ đục.
+2. **Làm mới dần (intra-refresh).** Thay vì gửi keyframe, drone rải các *khối intra* (vùng nhỏ vẽ
+   đầy đủ) qua nhiều khung; phải **hết một chu kỳ ~20 giây** toàn ảnh mới đúng. Ảnh đang ở giữa chu kỳ.
+3. **Vùng động hiện rõ, vùng tĩnh "kẹt".** P-frame mang chuyển động + sai lệch, nên chỗ **có cử động**
+   (người) được vẽ bằng dữ liệu thật → rõ; chỗ **đứng yên** (tường, trần) kế thừa nền xám sai → mờ.
+4. **Mất gói (packet loss).** Rớt gói UDP → mất vài khối mã hóa → các ô vuông "mosaic" bị vỡ.
+5. **Bộ tham số đi mượn.** VPS/SPS/PPS mượn từ phiên khác (vì bản ghi không có) → thêm chút sai lệch.
+
+**Gián tiếp (vì sao rơi vào tình huống đó):**
+- Drone **không gửi keyframe định kỳ** (thiết kế của DJI) → không có điểm khởi lại sạch khi bắt giữa phiên.
+- Các bản ghi bắt **vào giữa luồng** cho mục đích khác (đo pin, nghiêng gimbal), bỏ lỡ keyframe đầu phiên.
+- tcpdump chạy trên **điện thoại đang bận** → rớt một phần gói UDP video.
+
+**So sánh các bản ghi:** `cap_02` (nhàn rỗi, chỉ 2 chỗ mất gói) đoạn cuối sạch gần hoàn toàn nhưng clip
+30s nên ~2/3 đầu vẫn đang hội tụ; `cap_04` (người cử động, 55 chỗ mất gói) nhiều khối vỡ hơn; `cap_07`
+(nghiêng gimbal, mất gói + chuyển động nhiều) nhiễu nặng nhất.
+
+**Hệ quả:** đây chính là lý do **lệnh xin keyframe** (mục 5.4) quan trọng — gửi được nó là có ngay
+một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây hội tụ. Muốn đẹp hẳn còn cần **giảm mất gói**.
+
 ---
 
 ## 7. Các module telemetry — mức định danh
