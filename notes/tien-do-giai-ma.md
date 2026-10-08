@@ -42,6 +42,41 @@ phụ (cần bay để kiểm chứng) và một luồng cảm biến nhị phâ
 
 Mọi gói đều mở đầu bằng **header chung 16 byte**. Tùy loại kênh (byte 6) mà phần sau khác nhau.
 
+### 1.1. Gói tin có bị mã hóa không? — KHÔNG (và vì sao vẫn khó đọc)
+
+Câu hỏi đầu tiên: thứ làm ta khó đọc gói có phải là **mã hóa (mật mã)** không? **Không.** Dữ liệu
+**không hề bị mã hóa**. Chính giao thức DUML có sẵn một trường **"Encrypt"** trong header, và trên
+**26.048 frame** kiểm tra, giá trị đều là **None (0)** — DJI **chủ động chọn không mã hóa**. Không có
+AES, không TLS, không XOR.
+
+Từ "mã hóa" tiếng Việt gộp 3 nghĩa rất khác nhau — cần tách ra:
+
+| Nghĩa của "mã hóa" | Có trong gói Neo 2? | Vai trò |
+|---|:---:|---|
+| **Encryption (mật mã)** — giấu nội dung bằng khóa | ❌ KHÔNG | nếu có thì không khóa = chịu, không đọc nổi |
+| **Encoding (biểu diễn nhị phân)** — đóng gói dữ liệu thành byte theo định dạng riêng | ✅ CÓ | làm khó đọc nhưng **giải được** nếu hiểu định dạng |
+| **Compression (nén)** cho video | ✅ CÓ (H.265) | làm dữ liệu trông ngẫu nhiên dù không mã hóa |
+
+**Vậy cái gì làm khó đọc? (các lớp "encoding", không phải mật mã):**
+1. **Định dạng đóng gói riêng của DJI** — header ngoài không theo chuẩn công khai nào → phải tự dò
+   nghĩa từng byte. Khó vì **không có tài liệu**, không phải vì bị khóa.
+2. **Giao thức DUML dạng nhị phân** — byte thô (nguồn/đích/lệnh/payload) + CRC, không phải văn bản.
+3. **Lớp tunnel (frame lồng frame)** — frame thật bị bọc trong `0x51/0x01` → đây là lý do dissector
+   chuẩn của Wireshark không nhận ra gì, chứ không phải vì mã hóa.
+4. **Trường nhị phân đóng gói chặt** — int16/int32/float/quaternion, little-endian, dấu phẩy tĩnh
+   (vd 0.1°), **không có tên trường** → phải dùng "thay đổi có kiểm soát" để đoán nghĩa.
+5. **Video nén H.265 (entropy cao)** — trông y như ngẫu nhiên → dễ tưởng bị mã hóa. Nhưng **nén ≠ mã
+   hóa**: giải nén bằng ffmpeg là ra hình (điểm gây nhầm lẫn kinh điển).
+
+**Điểm đáng chú ý về an ninh:** DUML **có hỗ trợ mã hóa** (trường Encrypt liệt kê AES128/192/256,
+DES, XOR…), nhưng Neo 2 **để None** ở kết nối Wi-Fi trực tiếp này. Hệ quả: (a) *thuận lợi cho dự án* —
+revert được giao thức mà không phải phá mật mã, nên hướng tự xây SDK khả thi; (b) *về bảo mật* — ai
+trong tầm Wi-Fi và vào được mạng drone đều có thể đọc telemetry/video, và về lý thuyết chèn lệnh, vì
+tầng này **không mã hóa cũng không xác thực gói**.
+
+> **Tóm lại:** gói khó đọc vì **đóng gói nhị phân nhiều lớp theo định dạng riêng + video nén H.265**,
+> chứ **không phải vì mã hóa**. Rào cản là *"không có tài liệu"*, không phải *"không có khóa"*.
+
 ---
 
 ## 2. Phương pháp: làm sao xác định được từng phần của gói
