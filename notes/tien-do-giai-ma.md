@@ -226,6 +226,42 @@ trường GPS/độ cao/vận tốc 🟡 (suy theo chuẩn, dưới đất đề
 Khi giải mã các bản ghi (vd. `demo_cap02.mp4`, lưới khung của cap_04), ảnh **bắt đầu mờ đục như sương
 rồi rõ dần sau ~20 giây**, chỗ có người thì nhận ra được còn nền thì phẳng lì. Nguyên nhân:
 
+#### Bản chất: video nén đánh đổi "dung lượng" lấy "sự phụ thuộc"
+
+Một video 960×720 @30fps nếu lưu **đầy đủ từng khung** tốn ~40 MB/giây — không truyền nổi qua Wi-Fi.
+Mẹo nén: hai khung liên tiếp gần như giống hệt nhau, nên **hầu hết các khung chỉ lưu PHẦN THAY ĐỔI**
+so với khung trước (gọi là P-frame). Cái giá: mỗi khung **phụ thuộc** khung trước → video là một
+**chuỗi mắt xích**, không phải tập ảnh rời.
+
+- **P-frame không phải ảnh** — nó là một *"công thức sửa"*: "lấy khung trước, dời khối này sang phải
+  3 pixel, cộng thêm sai lệch kia". Nó **vô nghĩa nếu không có khung trước để sửa lên** (như công thức
+  "thêm 2 thìa đường" — vô dụng nếu chưa có ly nước).
+- **Keyframe (I-frame)** là **ảnh đầy đủ, tự vẽ được**, không cần gì trước nó. Nhiệm vụ: làm **điểm gốc**
+  để chuỗi P-frame bám vào — chỗ duy nhất "cắt đứt phụ thuộc, làm lại từ số 0".
+
+Khi bắt **vào giữa phiên**, cái đầu tiên nhận được là một P-frame (công thức sửa) nhưng **không biết
+sửa lên cái gì** → bộ giải mã phải bịa một nền xám rồi sửa lên đó → sai hệ thống → mờ đục. (Ví von:
+mở truyện ở giữa, đọc được câu "anh ta đáp: đồng ý" mà không biết câu hỏi — chữ đọc được nhưng nghĩa sai.)
+
+**Hai thứ khác nhau cùng thiếu khi bắt giữa phiên** (đừng nhầm):
+
+| Thứ thiếu | Nhiệm vụ | Thiếu thì sao |
+|---|---|---|
+| **VPS/SPS/PPS** (bộ tham số) | Dạy decoder *cách đọc* luồng: ảnh rộng bao nhiêu, màu tổ chức ra sao | **Đen màn hình** — không giải mã nổi 1 pixel |
+| **Keyframe** (I-frame) | Cho chuỗi một *ảnh gốc* để bám vào | Giải mã được nhưng **sai/mờ** |
+
+Ta **mượn được** VPS/SPS/PPS từ phiên khác (camera cùng cấu hình) nên vượt qua cái thiếu thứ nhất →
+ra được hình. Nhưng **không thể mượn keyframe** (nó là ảnh của đúng cảnh ngay lúc đó) → nên vẫn mờ.
+
+**Mất gói = đứt mắt xích giữa chuỗi:** vì mỗi khung sửa lên khung trước, một khối bị mất sẽ khiến **mọi
+khung sau "sửa lên cái sai" → lỗi lan truyền** (error propagation), kéo dài tới khi được vá lại. Đây là
+bản chất của "khối vỡ không tự hết": cái hỏng được **thừa kế** sang các khung kế tiếp.
+
+> **Một câu:** cơ chế giúp video nhỏ gọn (bỏ ảnh đầy đủ, chỉ lưu thay đổi) cũng chính là cơ chế khiến
+> nó dễ vỡ khi **thiếu điểm gốc** (keyframe) hoặc **đứt chuỗi** (mất gói).
+
+Dưới đây là các biểu hiện cụ thể của bản chất trên:
+
 **Trực tiếp (cơ chế ngay tại chỗ):**
 1. **Thiếu keyframe (I-frame).** Video nén gồm *keyframe* (ảnh đầy đủ, tự giải mã được) và *P-frame*
    (chỉ lưu phần thay đổi so với khung trước). Các bản ghi này bắt **vào giữa phiên**, không có
@@ -285,3 +321,51 @@ một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây h�
 
 Chi tiết từng phần: `notes/capture-log.md`. Báo cáo đầy đủ: `notes/bao-cao-ngay-3-6.md`.
 Danh mục khả năng SDK: `notes/apk-key-catalog.md`.
+
+---
+
+## 9. Ví dụ: mổ xẻ một gói tin thật
+
+Một gói **drone→app, 520 byte**, lấy từ `captures/cap_04_battery_drain.pcap`. Đây là ví dụ thật minh
+họa toàn bộ cấu trúc đã giải mã: header ngoài → lớp tunnel → các frame telemetry → pin ra số thật.
+
+**Hex payload UDP (48 byte đầu, đủ thấy header + frame pin):**
+```
+ [  0] 08 82 b1 ab 00 00 01 91 60 23 f8 23 00 00 00 00   ← header chung 16B
+ [ 16] 78 5d 78 5d 00 00 00 00 78 5d 78 5d 00 00 00 00   ← hằng số ❓
+ [ 32] e6 01 55 5c 04 80 27 ee 10 97 00 51 01 55 39 04   ← [32:34] độ dài; từ [34] frame
+ [ 48] 25 0b 02 01 08 00 0d 02 00 a0 1f 00 00 7b fd ff   ← bên trong: frame PIN
+ ...
+```
+
+**Bóc lớp 1 — header chung 16 byte** (mục 3):
+| Byte | Giá trị | Giải mã |
+|---|---|---|
+| [0:2] | `08 82` | 0x8208 → cờ 0x8000 bật, **độ dài = 520** (khớp kích thước gói) |
+| [2:4] | `b1 ab` | **ID phiên = 0xabb1** |
+| [4:6] | `00 00` | seq video = 0 (gói điều khiển, không phải video) |
+| [6] | `01` | **loại kênh = DUML drone→app** |
+| [7] | `91` | **checksum XOR** → tính lại = 0x91 → **KHỚP** |
+| [8:12] | `60 23 f8 23` | ACK/seq |
+| [12:16] | `00 00 00 00` | (thường 0) ❓ |
+
+**Bóc lớp 2 — header kênh DUML** (mục 4): byte [16:32] = `78 5d 78 5d …` (hằng số ❓);
+byte [32:34] = `e6 01` → **độ dài phần dữ liệu sau = 486 byte**.
+
+**Bóc lớp 3 — các frame DUML** (từ byte 34). Gói này chứa **4 frame tunnel**, mỗi cái bọc một frame
+thật bên trong:
+```
+55 | len=92  | tunnel 0x51/01  →  chứa:  55 | Pin→App   | set 0x0d id 0x02 | 44B
+                                           >>> PIN: 78%  8.096V  -645mA  1283/1639mAh  2S  46.4°C   ✅
+55 | len=60  | tunnel 0x51/01  →  chứa:  55 | Sensor→App| set 0x0a id 0xbc | 12B   ❓ (module 0x92)
+55 | len=152 | tunnel 0x51/01  →  chứa:  55 | Camera→App| set 0x00 id 0x99 | 104B  🟡 (cam_lens_state)
+55 | len=91  | tunnel 0x51/01  →  chứa:  55 | Sensor→App| set 0x23 id 0xb2 | 43B   ❓ (luồng 50Hz)
+```
+
+**Đọc ví dụ này:** một gói UDP duy nhất gói nhiều loại dữ liệu — pin (giải mã đầy đủ ✅), tham số
+camera (định danh 🟡), và hai luồng cảm biến chưa giải mã (❓) — tất cả đều bọc trong lớp tunnel và
+nằm sau đúng cái header 16 byte mà ta đã dựng lại. Mỗi frame đều qua kiểm CRC8 + CRC16 nên chắc chắn
+tách đúng ranh giới.
+
+(Tái tạo: dùng `poc/neo2_telemetry.py` để đọc telemetry, hoặc mở gói trong Wireshark với dissector
+`tools/dji-dissectors/dji-neo2-udp.lua`.)
