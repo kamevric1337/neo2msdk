@@ -567,3 +567,13 @@ Trong gói FC OSD General `0x03/0x43` (đã dùng cho pitch/roll/yaw ở cap_08)
 - [x] Xác nhận độ cao + vận tốc dọc (vgz) — xong (cap_09).
 - [ ] vgx/vgy ngang, GPS — cần bay ngoài trời / bay ngang.
 - [ ] Lệnh điều khiển app→drone — cần bài bay chủ động đẩy từng trục.
+
+### cap_09 (phân tích thêm): trạng thái bay trong OSD + ghi chú 0x92
+- **payload[30] = flyc_state** (trạng thái/chế độ FC, 7 bit thấp): dưới đất = 6, đang hover = 43.
+  Đúng vị trí OSD chuẩn (ngay sau yaw). Đã thêm vào `neo2_telemetry.py` (DroneState.flyc_state).
+- **payload[32:36] = controller_state** (u32 cờ trạng thái: động cơ/đang bay…): đổi khi cất cánh
+  (đất 0x00805000 → hover 0x0080511c). Từng bit chưa giải hết — thêm field thô vào decoder.
+- Thử dò cảm biến ToF hướng xuống (app hiện "Downward 0.6/Upward 1.8") trong 0x92: KHÔNG tách sạch
+  được vì hai mức bay (0.6 và 0.8m) quá gần → median bị nhoè. Nhiều field chỉ "bật khi bay" (0 dưới
+  đất → hằng số khi bay), là cờ trạng thái chứ không tỉ lệ độ cao. Muốn giải ToF/0x92 cần bài bay
+  tách biệt rõ 2-3 độ cao (vd 0.5m / 1.5m / 2.5m), giữ yên lâu mỗi mức.

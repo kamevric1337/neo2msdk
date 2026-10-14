@@ -109,11 +109,13 @@ class DroneState:
     vgx_ms: float             # (chưa kiểm chứng) vận tốc ngang trục X (m/s)
     vgy_ms: float             # (chưa kiểm chứng) vận tốc ngang trục Y
     vgz_ms: float             # ✅ vận tốc dọc (NED: âm = lên, dương = xuống)
+    flyc_state: int           # ✅ trạng thái/chế độ FC (cap_09: đất=6, bay=43). 7 bit thấp.
+    controller_state: int     # cờ trạng thái u32 (động cơ/đang bay…); bit riêng chưa giải hết
 
     def __str__(self):
         return (f"DroneState     pitch={self.pitch_deg:+6.1f}° roll={self.roll_deg:+6.1f}° "
                 f"yaw={self.yaw_deg:+6.1f}°  h={self.relative_height_m:+.1f}m "
-                f"vz={self.vgz_ms:+.1f}m/s  v_ngang=({self.vgx_ms:+.1f},{self.vgy_ms:+.1f})m/s?")
+                f"vz={self.vgz_ms:+.1f}m/s  fc_state={self.flyc_state}")
 
 
 @dataclass
@@ -157,7 +159,7 @@ def decode_frame(src, dst, cmd_set, cmd_id, payload):
         return GimbalAttitude(pitch, quat)
 
     # Hướng drone: FC OSD General (layout chuẩn DJI)
-    if cmd_set == 0x03 and cmd_id == 0x43 and len(payload) >= 30:
+    if cmd_set == 0x03 and cmd_id == 0x43 and len(payload) >= 36:
         pitch = _i16(payload, 24) / 10.0
         roll = _i16(payload, 26) / 10.0
         yaw = _i16(payload, 28) / 10.0
@@ -165,7 +167,9 @@ def decode_frame(src, dst, cmd_set, cmd_id, payload):
         vgx = _i16(payload, 18) / 10.0
         vgy = _i16(payload, 20) / 10.0
         vgz = _i16(payload, 22) / 10.0
-        return DroneState(pitch, roll, yaw, height, vgx, vgy, vgz)
+        flyc_state = payload[30] & 0x7F
+        controller_state = struct.unpack_from("<I", payload, 32)[0]
+        return DroneState(pitch, roll, yaw, height, vgx, vgy, vgz, flyc_state, controller_state)
 
     # App xin keyframe
     if src == 0x02 and dst == 0x09 and cmd_set == 0x01 and cmd_id == 0x01 and len(payload) > 5:
