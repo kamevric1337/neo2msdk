@@ -577,3 +577,41 @@ Trong gói FC OSD General `0x03/0x43` (đã dùng cho pitch/roll/yaw ở cap_08)
   được vì hai mức bay (0.6 và 0.8m) quá gần → median bị nhoè. Nhiều field chỉ "bật khi bay" (0 dưới
   đất → hằng số khi bay), là cờ trạng thái chứ không tỉ lệ độ cao. Muốn giải ToF/0x92 cần bài bay
   tách biệt rõ 2-3 độ cao (vd 0.5m / 1.5m / 2.5m), giữ yên lâu mỗi mức.
+
+## cap_10_control.pcap (đang ghi) — tách lệnh điều khiển (yaw + ga) trong không gian hẹp
+- Mục tiêu: tìm frame lệnh app→drone và tách trục yaw, throttle. Drone hover tại chỗ, chỉ xoay/lên.
+  (Né vật cản phanh khi lên gần trần nhưng app vẫn GỬI lệnh cần → vẫn bắt được.)
+- Bắt đầu ghi: 2026-10-14 18:35:59, tcpdump PID 12396.
+- Nguyên tắc: đẩy cần → GIỮ 2-3s → thả về giữa. Mốc (giờ điện thoại):
+  - Bước 1 (hover, cần giữa - gốc): 18:37:04
+  - Bước 2 (XOAY TRÁI, giữ): 18:37:32
+  - Bước 3 (XOAY PHẢI, giữ): 18:38:04
+  - Bước 4 (GA LÊN, giữ): 18:38:38
+    + LƯU Ý: bước 3 (xoay phải) bị LẪN ga xuống (drone tụt còn ~0.4m). Byte nào đổi ở cả B3 và B4 (ngược chiều) = trục ga, không phải yaw. Yaw thật = byte chỉ đổi ở B2 và B3 (ngược nhau).
+  - Bước 5 (hạ cánh): 18:40:27
+- Dừng ghi: ~18:40 (SIGINT). File ~228 MB, đã kéo về `captures/cap_10_control.pcap`.
+
+### Kết quả cap_10: lệnh điều khiển app→drone BỊ XÁO TRỘN/MÃ HÓA (tầng ứng dụng)
+Mục tiêu tách trục yaw/throttle trong lệnh điều khiển KHÔNG đạt — nhưng tìm ra lý do quan trọng:
+- Mọi "byte đổi theo thao tác" trong frame app→drone đều là **bộ đếm/timestamp tăng đều** (các cửa
+  sổ xếp theo thời gian nên counter trông như "phản ứng theo cần"). Vd `0x02→0xa9 set 0x01 id 0x0a`
+  byte[20:22] = bộ đếm 16-bit lăn (tăng ~8 mỗi 2s, wrap 255→0). KHÔNG phải trục cần.
+- **Kênh mang lệnh thật: `0x02→0x92 set 0x03 id 0xf8` (~88-100 byte, tốc độ cao).** Đổi **100%**
+  số byte mỗi frame NGAY CẢ lúc hover đứng yên (cần giữa, drone không chuyển động). Chiều ngược
+  `0x92→0x02 set 0x03 id 0xf8` đổi **92%**/frame. Nếu là lệnh cần giữ nguyên thì phải gần như không
+  đổi → đây là **dữ liệu bị xáo trộn/mã hóa ở tầng ứng dụng** (per-packet nonce).
+- Trường Encrypt của DUML vẫn = **None** cho các frame này → mã hóa KHÔNG ở tầng DUML mà ở **payload
+  (tầng ứng dụng)**. Nói cách khác: DUML không mã hóa, nhưng DJI mã hóa riêng nội dung kênh điều khiển.
+
+**Tinh chỉnh kết luận an ninh (quan trọng):**
+- Telemetry (pin, tư thế, OSD, độ cao…) và video: **plaintext, đọc được** — như đã chứng minh.
+- Kênh **lệnh điều khiển app→drone** (`0x03/0xf8` qua `0x92`) và kênh `0x92` nói chung:
+  **bị xáo trộn/mã hóa** → KHÔNG đọc/chèn lệnh điều khiển trực tiếp được.
+- Hợp lý về bảo mật: cho phép đọc trạng thái, nhưng bảo vệ khả năng RA LỆNH (chống chiếm quyền).
+
+**Hệ quả cho SDK:** muốn tự điều khiển drone, không thể chỉ replay gói — phải hiểu/vượt lớp xáo trộn
+của kênh 0x92/0x03/0xf8, hoặc tìm đường ra lệnh khác (vd hook trong APK bằng Frida). Việc đọc
+telemetry + video thì vẫn làm trực tiếp được.
+
+- [x] Thử tách lệnh điều khiển (cap_10) — phát hiện kênh điều khiển bị mã hóa tầng ứng dụng.
+- [ ] Dịch ngược lớp mã hóa 0x92/0x03/0xf8 (APK/Frida) — việc lớn, để sau.

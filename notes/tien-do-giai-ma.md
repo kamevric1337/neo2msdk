@@ -10,6 +10,7 @@
 | ✅ | Đã giải mã **và kiểm chứng** bằng thực nghiệm (thay đổi có kiểm soát) |
 | 🟡 | Suy theo chuẩn DJI / mới một phần — **chưa kiểm chứng** trên Neo 2 |
 | ❓ | **Chưa giải mã** — chưa rõ ý nghĩa |
+| 🔒 | **Bị mã hóa/xáo trộn** ở tầng ứng dụng — không đọc trực tiếp được (cần dịch ngược) |
 
 Tiến độ tổng thể: **khung giao thức và các trường telemetry cốt lõi đã xong**; còn lại là các trường
 phụ (cần bay để kiểm chứng) và một luồng cảm biến nhị phân tốc độ cao.
@@ -42,12 +43,17 @@ phụ (cần bay để kiểm chứng) và một luồng cảm biến nhị phâ
 
 Mọi gói đều mở đầu bằng **header chung 16 byte**. Tùy loại kênh (byte 6) mà phần sau khác nhau.
 
-### 1.1. Gói tin có bị mã hóa không? — KHÔNG (và vì sao vẫn khó đọc)
+### 1.1. Gói tin có bị mã hóa không? — TELEMETRY/VIDEO thì KHÔNG, kênh ĐIỀU KHIỂN thì CÓ
 
-Câu hỏi đầu tiên: thứ làm ta khó đọc gói có phải là **mã hóa (mật mã)** không? **Không.** Dữ liệu
-**không hề bị mã hóa**. Chính giao thức DUML có sẵn một trường **"Encrypt"** trong header, và trên
-**26.048 frame** kiểm tra, giá trị đều là **None (0)** — DJI **chủ động chọn không mã hóa**. Không có
-AES, không TLS, không XOR.
+Câu trả lời chia hai nửa (phát hiện ở cap_09/cap_10):
+- **Telemetry (pin, tư thế, độ cao, OSD…) và video: KHÔNG mã hóa** — đọc/giải mã trực tiếp được.
+  Trường **"Encrypt"** trong header DUML = **None (0)** trên **26.048 frame** kiểm tra.
+- **Kênh lệnh điều khiển app→drone (`0x02→0x92 set 0x03 id 0xf8`): CÓ bị xáo trộn/mã hóa** ở tầng
+  ứng dụng. Frame này đổi **~100% số byte mỗi gói ngay cả khi hover đứng yên** (cần giữ nguyên) —
+  nếu là lệnh thường thì phải gần như không đổi → dấu hiệu mã hóa có nonce đổi theo gói. Thú vị là
+  trường Encrypt của DUML vẫn ghi None, nên lớp mã hóa nằm ở **payload**, không ở tầng DUML.
+
+Phần dưới nói về nửa thứ nhất (telemetry/video) — nơi "khó đọc" KHÔNG phải do mật mã mà do cách đóng gói.
 
 Từ "mã hóa" tiếng Việt gộp 3 nghĩa rất khác nhau — cần tách ra:
 
@@ -68,14 +74,17 @@ Từ "mã hóa" tiếng Việt gộp 3 nghĩa rất khác nhau — cần tách r
 5. **Video nén H.265 (entropy cao)** — trông y như ngẫu nhiên → dễ tưởng bị mã hóa. Nhưng **nén ≠ mã
    hóa**: giải nén bằng ffmpeg là ra hình (điểm gây nhầm lẫn kinh điển).
 
-**Điểm đáng chú ý về an ninh:** DUML **có hỗ trợ mã hóa** (trường Encrypt liệt kê AES128/192/256,
-DES, XOR…), nhưng Neo 2 **để None** ở kết nối Wi-Fi trực tiếp này. Hệ quả: (a) *thuận lợi cho dự án* —
-revert được giao thức mà không phải phá mật mã, nên hướng tự xây SDK khả thi; (b) *về bảo mật* — ai
-trong tầm Wi-Fi và vào được mạng drone đều có thể đọc telemetry/video, và về lý thuyết chèn lệnh, vì
-tầng này **không mã hóa cũng không xác thực gói**.
+**Điểm đáng chú ý về an ninh (mô hình "đọc được nhưng khó ra lệnh"):**
+- *Đọc:* ai trong tầm Wi-Fi và vào được mạng drone đều có thể **đọc telemetry + xem video** (plaintext).
+- *Ra lệnh:* **không** chèn lệnh điều khiển trực tiếp được, vì kênh lệnh (`0x92/0x03/0xf8`) **bị mã
+  hóa ở tầng ứng dụng**. DJI có vẻ cố ý: cho đọc trạng thái, nhưng bảo vệ khả năng điều khiển (chống
+  chiếm quyền bay).
+- *Hệ quả cho SDK:* phần **đọc telemetry/video làm trực tiếp được**; phần **điều khiển** thì phải
+  vượt lớp mã hóa kênh 0x92 (dịch ngược APK / hook Frida) — việc lớn, để sau.
 
-> **Tóm lại:** gói khó đọc vì **đóng gói nhị phân nhiều lớp theo định dạng riêng + video nén H.265**,
-> chứ **không phải vì mã hóa**. Rào cản là *"không có tài liệu"*, không phải *"không có khóa"*.
+> **Tóm lại:** telemetry/video khó đọc là vì **đóng gói nhị phân nhiều lớp + video nén H.265**, không
+> phải mật mã (rào cản là *"không có tài liệu"*). Riêng **kênh điều khiển thì đúng là có mã hóa** —
+> đây là rào cản thật sự cho việc tự ra lệnh bay.
 
 ---
 
@@ -350,7 +359,7 @@ một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây h�
 | Drone: trạng thái bay (flyc_state) + cờ controller_state | ✅ (cap_09) |
 | Drone: vận tốc ngang (vgx/vgy) | 🟡 cần bay ngang |
 | Drone: GPS (kinh/vĩ độ) | 🟡 cần ngoài trời |
-| Lệnh điều khiển bay (app → drone) | ❓ cần bài bay chủ động đẩy cần |
+| Lệnh điều khiển bay (app → drone) | 🔒 bị mã hóa tầng ứng dụng (cap_10) — cần dịch ngược |
 | Nhiệt độ pin (đơn vị) | 🟡 |
 | ACK/seq chiều drone→app, byte 12–15 header | ❓ |
 | Byte 16–31 header DUML (`78 5d…`) | ❓ |
