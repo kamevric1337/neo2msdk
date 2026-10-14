@@ -218,17 +218,18 @@ Hai trường độc lập (pitch i16 và quaternion) khớp nhau tuyệt đối
 ### 5.3. Hướng thân drone — `0x03  set 0x03 / id 0x43` (OSD General, payload 85 byte)
 
 ```
- payload: 0 ──────── 15  16 17  18 ─── 23   24 25  26 27  28 29   30 ─────────────── 84
-         ┌──────────────┬──────┬──────────┬──────┬──────┬──────┬──────────────────────┐
-         │ Kinh/Vĩ độ   │ Độ   │ Vận tốc  │Pitch │ Roll │ Yaw  │ Trạng thái bay, GPS, │
-         │ 2×double     │ cao  │ x/y/z    │ i16  │ i16  │ i16  │ … (theo OSD chuẩn)   │
-         │              │ i16  │ 3×i16    │ 0.1° │ 0.1° │ 0.1° │                      │
-         ├──────────────┼──────┼──────────┼──────┼──────┼──────┼──────────────────────┤
-         │     🟡       │  🟡  │   🟡     │  ✅  │  ✅  │  ✅  │        🟡/❓          │
-         └──────────────┴──────┴──────────┴──────┴──────┴──────┴──────────────────────┘
+ payload: 0 ──────── 15  16 17  18 1920 2122 2223  24 25  26 27  28 29  30 ──────── 84
+         ┌──────────────┬──────┬─────┬─────┬─────┬──────┬──────┬──────┬────────────────┐
+         │ Kinh/Vĩ độ   │ Độ   │ vgx │ vgy │ vgz │Pitch │ Roll │ Yaw  │ Trạng thái bay,│
+         │ 2×double     │ cao  │ i16 │ i16 │ i16 │ i16  │ i16  │ i16  │ GPS… (OSD chuẩn)│
+         │              │ i16  │     │     │ dọc │ 0.1° │ 0.1° │ 0.1° │                │
+         ├──────────────┼──────┼─────┼─────┼─────┼──────┼──────┼──────┼────────────────┤
+         │     🟡       │  ✅  │ 🟡  │ 🟡  │ ✅  │  ✅  │  ✅  │  ✅  │      🟡/❓      │
+         └──────────────┴──────┴─────┴─────┴─────┴──────┴──────┴──────┴────────────────┘
 ```
-Pitch/Roll/Yaw ✅ (kiểm chứng cap_08, đổi từng trục). Vì Neo 2 dùng **layout OSD chuẩn DJI**, các
-trường GPS/độ cao/vận tốc 🟡 (suy theo chuẩn, dưới đất đều ~0 — cần bay để xác nhận).
+Pitch/Roll/Yaw ✅ (cap_08). **Độ cao [16:18] và vận tốc dọc vgz [22:24] ✅** (cap_09, bay trong nhà:
+độ cao khớp app 0→0.6→0.8→0 m; vz âm khi lên, dương khi xuống — quy ước NED). vgx/vgy ngang 🟡 (chưa
+bay ngang). GPS 🟡 (cần ngoài trời có tín hiệu). Neo 2 dùng **layout OSD chuẩn DJI**.
 
 ### 5.4. Lệnh app xin keyframe — `0x02→0x09  set 0x01 / id 0x01` — ✅
 
@@ -345,14 +346,16 @@ một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây h�
 | Pin: điện áp, dòng, dung lượng, cell, % | ✅ |
 | Gimbal: góc pitch + quaternion | ✅ |
 | Hướng drone: pitch/roll/yaw | ✅ |
-| Drone: GPS / độ cao / vận tốc (OSD chuẩn) | 🟡 cần bay |
+| Drone: độ cao + vận tốc dọc (vgz) | ✅ (cap_09) |
+| Drone: vận tốc ngang (vgx/vgy) | 🟡 cần bay ngang |
+| Drone: GPS (kinh/vĩ độ) | 🟡 cần ngoài trời |
+| Lệnh điều khiển bay (app → drone) | ❓ cần bài bay chủ động đẩy cần |
 | Nhiệt độ pin (đơn vị) | 🟡 |
 | ACK/seq chiều drone→app, byte 12–15 header | ❓ |
 | Byte 16–31 header DUML (`78 5d…`) | ❓ |
 | Byte 16–19 header video | ❓ |
 | Module camera `0x28`: từng trường | 🟡 |
 | Module cảm biến `0x92`: nội dung | ❓ |
-| Lệnh điều khiển bay (app → drone) | ❓ cần bay |
 
 Chi tiết từng phần: `notes/capture-log.md`. Báo cáo đầy đủ: `notes/bao-cao-ngay-3-6.md`.
 Danh mục khả năng SDK: `notes/apk-key-catalog.md`.

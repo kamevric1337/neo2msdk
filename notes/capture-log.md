@@ -532,3 +532,38 @@ Tóm tắt:
 - Lộ trình điều khiển (cho bay thử sau): nhóm `Joystick*`/`VirtualJoyStick` (cần điều khiển),
   `TakeOff`/`ForceLanding`, `GoHome*`, và nhóm điều khiển gimbal `GimbalMotionControlReq`/
   `GimbalAngleRotation`.
+
+# Ngày 7 — bay trong nhà (hover thấp)
+
+## cap_09_flight_indoor.pcap (đang ghi)
+- Mục tiêu: kiểm chứng trường độ cao (OSD [16:18]), vận tốc dọc vgz (OSD [22:24]), và tìm lệnh điều
+  khiển app→drone (đẩy cần ga). Trong nhà, KHÔNG GPS. Neo hover bằng cảm biến hướng xuống.
+- Bắt đầu ghi: 2026-10-14 18:12:26, tcpdump PID 9751, `/sdcard/cap_09_flight_indoor.pcap`.
+- Người dùng đọc "H" (độ cao) trên DJI Fly tại mỗi mức, báo kèm giờ điện thoại.
+- Mốc thao tác (giờ điện thoại):
+  - Bước 1 (dưới đất, H=0): 18:13:10
+- (Ghi lại lần 2 sau khi người dùng tập hover) Bắt đầu: 2026-10-14 18:18:05, tcpdump PID 11135.
+  - Bước 1 (dưới đất, H=0): 18:18:29
+  - Bước 2 (tự hover): 18:19:36 — app hiện Upward=1.8m (trần), Downward=0.6m (độ cao so với sàn). => H thực ~0.6m.
+  - Bước 3 (đẩy cần ga lên, hover cao hơn): 18:21:42 — H=0.7m (app). Lúc đẩy cần ga lên = có lệnh điều khiển app->drone.
+  - Bước 4 (hạ cánh, chạm đất): 18:22:08
+- Dừng ghi: 18:22:08 (SIGINT). File ~207 MB, đã kéo về `captures/cap_09_flight_indoor.pcap`.
+
+### Kết quả cap_09: XÁC NHẬN độ cao và vận tốc dọc (OSD chuẩn)
+Trong gói FC OSD General `0x03/0x43` (đã dùng cho pitch/roll/yaw ở cap_08):
+- **payload[16:18] = i16 LE = độ cao tương đối, đơn vị 0.1 m.** Khớp đúng app:
+  dưới đất 0.0m · tự hover 0.6m (app hiện "Downward 0.6") · đẩy ga lên 0.7–0.8m (app H=0.7) · hạ 0.0m.
+- **payload[22:24] = i16 LE = vận tốc dọc vgz, 0.1 m/s, quy ước NED (trục Z hướng xuống).**
+  Cất cánh (đi LÊN): vz = -0.7 m/s. Hạ cánh (đi XUỐNG): vz = +0.1…+0.2 m/s. → âm = lên, dương = xuống.
+- payload[18:22] = vgx/vgy (vận tốc ngang): CHƯA kiểm chứng (bài này chỉ bay dọc, vx/vy ~0). Cần bay
+  ngang để xác nhận.
+- GPS [0:16]: không kiểm được trong nhà (không có tín hiệu, lon/lat = 0).
+- **Lệnh điều khiển app→drone: CHƯA tách được dứt khoát.** Bước 2 là TỰ cất cánh (FC tự điều khiển ga,
+  app không gửi cần), và bước 3 người dùng chỉ đẩy ga rất nhẹ (0.6→0.8m) nên tín hiệu yếu. Frame
+  tốc độ cao nhất app→drone là `0x02→0xa9 set 0x01 id 0x0a` (28B, ~20Hz) — ứng viên "virtual RC/cần
+  ảo" theo kiểu DJI, nhưng byte [20:22] trông như bộ đếm lăn, các trục cần chưa rõ. Cần một bài bay
+  CHỦ ĐỘNG đẩy từng trục (ga/tiến-lùi/nghiêng/xoay) hết cỡ giữ vài giây để tách sạch — để lần sau.
+
+- [x] Xác nhận độ cao + vận tốc dọc (vgz) — xong (cap_09).
+- [ ] vgx/vgy ngang, GPS — cần bay ngoài trời / bay ngang.
+- [ ] Lệnh điều khiển app→drone — cần bài bay chủ động đẩy từng trục.

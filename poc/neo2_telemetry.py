@@ -98,21 +98,22 @@ class GimbalAttitude:
 class DroneState:
     """Trích theo layout OSD General chuẩn DJI (frame 0x03/0x43).
 
-    pitch/roll/yaw đã kiểm chứng trên cap_08. Các trường dưới đây suy từ layout
-    chuẩn, CHƯA kiểm chứng khi bay — chỉ hiển thị để sớm dùng, cần xác nhận lại.
+    Đã kiểm chứng: pitch/roll/yaw (cap_08), relative_height + vgz (cap_09, bay trong nhà).
+    vgx/vgy suy từ layout chuẩn, CHƯA kiểm chứng (cần bay ngang). vgz theo quy ước NED
+    (trục Z hướng xuống): âm = đang lên, dương = đang xuống.
     """
     pitch_deg: float
     roll_deg: float
     yaw_deg: float
-    relative_height_m: float  # (chưa kiểm chứng) độ cao so với điểm cất cánh
-    vgx_ms: float             # (chưa kiểm chứng) vận tốc theo trục X (m/s)
-    vgy_ms: float             # (chưa kiểm chứng)
-    vgz_ms: float             # (chưa kiểm chứng)
+    relative_height_m: float  # ✅ độ cao so với điểm cất cánh (0.1m)
+    vgx_ms: float             # (chưa kiểm chứng) vận tốc ngang trục X (m/s)
+    vgy_ms: float             # (chưa kiểm chứng) vận tốc ngang trục Y
+    vgz_ms: float             # ✅ vận tốc dọc (NED: âm = lên, dương = xuống)
 
     def __str__(self):
         return (f"DroneState     pitch={self.pitch_deg:+6.1f}° roll={self.roll_deg:+6.1f}° "
-                f"yaw={self.yaw_deg:+6.1f}°  h={self.relative_height_m:+.1f}m? "
-                f"v=({self.vgx_ms:+.1f},{self.vgy_ms:+.1f},{self.vgz_ms:+.1f})m/s?")
+                f"yaw={self.yaw_deg:+6.1f}°  h={self.relative_height_m:+.1f}m "
+                f"vz={self.vgz_ms:+.1f}m/s  v_ngang=({self.vgx_ms:+.1f},{self.vgy_ms:+.1f})m/s?")
 
 
 @dataclass
