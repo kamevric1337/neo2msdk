@@ -347,6 +347,7 @@ một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây h�
 | Gimbal: góc pitch + quaternion | ✅ |
 | Hướng drone: pitch/roll/yaw | ✅ |
 | Drone: độ cao + vận tốc dọc (vgz) | ✅ (cap_09) |
+| Drone: trạng thái bay (flyc_state) + cờ controller_state | ✅ (cap_09) |
 | Drone: vận tốc ngang (vgx/vgy) | 🟡 cần bay ngang |
 | Drone: GPS (kinh/vĩ độ) | 🟡 cần ngoài trời |
 | Lệnh điều khiển bay (app → drone) | ❓ cần bài bay chủ động đẩy cần |
