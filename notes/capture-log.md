@@ -637,3 +637,33 @@ Kết luận "kênh điều khiển bị mã hóa" ở trên là SAI. Kiểm tra
 
 - [x] ĐÍNH CHÍNH: 0x03/0xf8 là đọc-tham-số-theo-hash, không mã hóa.
 - [ ] Tìm lệnh điều khiển thật — còn mở.
+
+### Đào APK: KIẾN TRÚC lệnh điều khiển (từ chuỗi/symbol trong libsdk_jni.so)
+Không tìm thấy giá trị cần (int16 lẫn float) trong capture điều khiển tay của DJI Fly → điều khiển
+tay của DJI Fly KHÔNG đi qua đường SDK công khai. Nhưng đọc symbol trong `libsdk_jni.so` cho biết
+**kiến trúc điều khiển** (quan trọng để tự xây SDK):
+
+**Luồng gửi lệnh cần (đường SDK công khai, cho app bên thứ ba):**
+1. **Xin quyền điều khiển trước:** `FlightControllerAbstraction::SendJoystickControlAuthPack`,
+   `RequestJoystickControlAuth` / `ReleaseJoystickControlAuth`. → BẮT BUỘC có quyền mới gửi được cần.
+2. **Gửi giá trị cần:** `uav::sdk::MobileRCHandler::SendCmd(JoystickConfig const&)` — hàm dựng & gửi.
+   API tầng trên: `ModuleMediator::SetMobileRCJoystickValue(sessionId, float, float, float, float,
+   MobileRCJoystickButtonState)` → **4 float = 4 trục cần** + nút.
+3. Cấu hình: keys `JoystickControlMode`, `JoystickControlSpeed`, `JoystickPitchInverted`,
+   `JoystickYawInverted`, `IsSupportVirtualJoyStick`.
+   Log tag trong hàm gửi: `SW_Pro_Gnd_JoyStick_Send`.
+
+**Vì sao chưa lấy được frame DUML cụ thể:**
+- DJI Fly dùng đường nội bộ riêng (không phải MobileRCHandler) → không bắt thụ động được.
+- Đường SDK công khai (MobileRCHandler) thì DJI Fly không dùng → không xuất hiện trong capture.
+- Hàm `SendCmd`/`SetMobileRCJoystickValue` bị **strip** khỏi bảng symbol → disassemble tĩnh trong
+  lib 87 MB rất tốn công; không có hàm JNI `Java_*` riêng để hook theo tên (DJI dùng dispatcher chung).
+
+**Hướng tiếp theo để lấy frame điều khiển chính xác (động, bằng Frida — đã cài frida-server Ngày 2):**
+- Hook điểm CHUNG nơi mọi frame DUML được dựng/gửi (hàm tính CRC16 hoặc hàm gửi socket UDP), log
+  realtime mọi gói app→drone kèm cmd_set/id. Khi đẩy cần sẽ thấy cmd nào xuất hiện + byte đổi.
+- HOẶC hook theo địa chỉ hàm `MobileRCHandler::SendCmd` (resolve qua pattern) để đọc JoystickConfig.
+- Đây là việc cho buổi sau (cần viết script Frida + bay thử đồng thời).
+
+- [x] Đào APK tìm hàm dựng lệnh điều khiển — tìm ra kiến trúc (auth + MobileRCHandler::SendCmd, 4 float).
+- [ ] Lấy frame DUML điều khiển cụ thể — cần Frida hook động (buổi sau).
