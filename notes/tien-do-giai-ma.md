@@ -10,7 +10,6 @@
 | ✅ | Đã giải mã **và kiểm chứng** bằng thực nghiệm (thay đổi có kiểm soát) |
 | 🟡 | Suy theo chuẩn DJI / mới một phần — **chưa kiểm chứng** trên Neo 2 |
 | ❓ | **Chưa giải mã** — chưa rõ ý nghĩa |
-| 🔒 | **Bị mã hóa/xáo trộn** ở tầng ứng dụng — không đọc trực tiếp được (cần dịch ngược) |
 
 Tiến độ tổng thể: **khung giao thức và các trường telemetry cốt lõi đã xong**; còn lại là các trường
 phụ (cần bay để kiểm chứng) và một luồng cảm biến nhị phân tốc độ cao.
@@ -43,17 +42,17 @@ phụ (cần bay để kiểm chứng) và một luồng cảm biến nhị phâ
 
 Mọi gói đều mở đầu bằng **header chung 16 byte**. Tùy loại kênh (byte 6) mà phần sau khác nhau.
 
-### 1.1. Gói tin có bị mã hóa không? — TELEMETRY/VIDEO thì KHÔNG, kênh ĐIỀU KHIỂN thì CÓ
+### 1.1. Gói tin có bị mã hóa không? — KHÔNG (toàn bộ đều plaintext)
 
-Câu trả lời chia hai nửa (phát hiện ở cap_09/cap_10):
-- **Telemetry (pin, tư thế, độ cao, OSD…) và video: KHÔNG mã hóa** — đọc/giải mã trực tiếp được.
-  Trường **"Encrypt"** trong header DUML = **None (0)** trên **26.048 frame** kiểm tra.
-- **Kênh lệnh điều khiển app→drone (`0x02→0x92 set 0x03 id 0xf8`): CÓ bị xáo trộn/mã hóa** ở tầng
-  ứng dụng. Frame này đổi **~100% số byte mỗi gói ngay cả khi hover đứng yên** (cần giữ nguyên) —
-  nếu là lệnh thường thì phải gần như không đổi → dấu hiệu mã hóa có nonce đổi theo gói. Thú vị là
-  trường Encrypt của DUML vẫn ghi None, nên lớp mã hóa nằm ở **payload**, không ở tầng DUML.
+Câu trả lời: thứ làm ta khó đọc gói có phải là **mã hóa (mật mã)** không? **Không.** Trường **"Encrypt"**
+trong header DUML = **None (0)** trên **26.048 frame** kiểm tra. Telemetry, video, và cả kênh đọc tham
+số đều là plaintext.
 
-Phần dưới nói về nửa thứ nhất (telemetry/video) — nơi "khó đọc" KHÔNG phải do mật mã mà do cách đóng gói.
+> **Ghi chú tự sửa:** ban đầu (cap_10) frame `0x02→0x92 set 0x03 id 0xf8` trông "ngẫu nhiên, đổi
+> ~100% byte mỗi gói" nên bị **nghi nhầm là mã hóa**. Kiểm lại với dissector: đó là lệnh **"Config
+> Table: Read Param By Hash"** — app đọc tham số cấu hình theo mã băm. Đếm ra chỉ **48 hash khác nhau
+> lặp đi lặp lại** (nếu mã hóa thì phải toàn hash duy nhất). Vậy nó **plaintext**, chỉ trông ngẫu nhiên
+> vì hash 4 byte. Bài học: luôn đối chiếu dissector trước khi kết luận "mã hóa".
 
 Từ "mã hóa" tiếng Việt gộp 3 nghĩa rất khác nhau — cần tách ra:
 
@@ -74,17 +73,14 @@ Từ "mã hóa" tiếng Việt gộp 3 nghĩa rất khác nhau — cần tách r
 5. **Video nén H.265 (entropy cao)** — trông y như ngẫu nhiên → dễ tưởng bị mã hóa. Nhưng **nén ≠ mã
    hóa**: giải nén bằng ffmpeg là ra hình (điểm gây nhầm lẫn kinh điển).
 
-**Điểm đáng chú ý về an ninh (mô hình "đọc được nhưng khó ra lệnh"):**
-- *Đọc:* ai trong tầm Wi-Fi và vào được mạng drone đều có thể **đọc telemetry + xem video** (plaintext).
-- *Ra lệnh:* **không** chèn lệnh điều khiển trực tiếp được, vì kênh lệnh (`0x92/0x03/0xf8`) **bị mã
-  hóa ở tầng ứng dụng**. DJI có vẻ cố ý: cho đọc trạng thái, nhưng bảo vệ khả năng điều khiển (chống
-  chiếm quyền bay).
-- *Hệ quả cho SDK:* phần **đọc telemetry/video làm trực tiếp được**; phần **điều khiển** thì phải
-  vượt lớp mã hóa kênh 0x92 (dịch ngược APK / hook Frida) — việc lớn, để sau.
+**Điểm đáng chú ý về an ninh:** DUML **có hỗ trợ mã hóa** (trường Encrypt liệt kê AES/DES/XOR…) nhưng
+Neo 2 **để None** ở kết nối Wi-Fi trực tiếp này → ai trong tầm Wi-Fi và vào được mạng drone đều có thể
+**đọc telemetry + xem video**. Về việc **ra lệnh**: lệnh điều khiển cần (stick) **chưa tìm ra vị trí**
+(xem mục 5.5) — chưa rõ có mã hóa hay không, nhưng cho tới giờ **chưa thấy bằng chứng mã hóa** ở bất
+kỳ kênh nào.
 
-> **Tóm lại:** telemetry/video khó đọc là vì **đóng gói nhị phân nhiều lớp + video nén H.265**, không
-> phải mật mã (rào cản là *"không có tài liệu"*). Riêng **kênh điều khiển thì đúng là có mã hóa** —
-> đây là rào cản thật sự cho việc tự ra lệnh bay.
+> **Tóm lại:** gói khó đọc vì **đóng gói nhị phân nhiều lớp theo định dạng riêng + video nén H.265**,
+> chứ **không phải vì mã hóa**. Rào cản là *"không có tài liệu"*, không phải *"không có khóa"*.
 
 ---
 
@@ -252,6 +248,20 @@ bay ngang). GPS 🟡 (cần ngoài trời có tín hiệu). Neo 2 dùng **layout
 ```
 5/5 lần khớp + đối chiếu mã app (`AppRequestIFrame`). Chưa gửi thử chủ động để chốt 100%.
 
+### 5.5. Lệnh điều khiển cần (stick) — ❓ CHƯA tìm ra vị trí (không phải do mã hóa)
+
+Bài bay cap_10 (đẩy yaw trái/phải, ga lên có kiểm soát) **chưa tách được trục cần**:
+- Mọi "byte đổi theo thao tác" trong frame app→drone hóa ra là **bộ đếm/timestamp lăn** (vd `0x02→0xa9
+  set 0x01 id 0x0a` byte[20:22] = bộ đếm 16-bit) — không phải giá trị cần.
+- Frame liên tục tốc độ cao nhất app→drone là `0x02→0xa9 set 0x01 id 0x0a` (28B, ~20Hz) — ứng viên
+  virtual-RC, nhưng khi đẩy cần chỉ bộ đếm đổi, 25 byte còn lại không đổi.
+- Không frame nào CHỈ xuất hiện lúc đẩy cần.
+- **Lưu ý lịch sử:** frame `0x03/0xf8` từng bị nghi là "lệnh điều khiển bị mã hóa", nhưng thực ra là
+  lệnh **đọc tham số theo hash** (plaintext) — xem mục 1.1.
+
+→ Cần: bài bay đẩy cần **mạnh & lâu** hơn, hoặc **dịch ngược APK** tìm hàm dựng frame điều khiển
+(có key SDK `JoystickControlMode`, `VirtualJoyStick`). Đây là mảnh ghép lớn còn thiếu để tự ra lệnh bay.
+
 ---
 
 ## 6. Kênh VIDEO (byte 6 = 0x02): header 20 byte + H.265
@@ -359,7 +369,7 @@ một khung đầy đủ, ảnh **nét tức thì** thay vì chờ ~20 giây h�
 | Drone: trạng thái bay (flyc_state) + cờ controller_state | ✅ (cap_09) |
 | Drone: vận tốc ngang (vgx/vgy) | 🟡 cần bay ngang |
 | Drone: GPS (kinh/vĩ độ) | 🟡 cần ngoài trời |
-| Lệnh điều khiển bay (app → drone) | 🔒 bị mã hóa tầng ứng dụng (cap_10) — cần dịch ngược |
+| Lệnh điều khiển bay (app → drone) | ❓ chưa tìm ra vị trí (không phải do mã hóa) |
 | Nhiệt độ pin (đơn vị) | 🟡 |
 | ACK/seq chiều drone→app, byte 12–15 header | ❓ |
 | Byte 16–31 header DUML (`78 5d…`) | ❓ |

@@ -615,3 +615,25 @@ telemetry + video thì vẫn làm trực tiếp được.
 
 - [x] Thử tách lệnh điều khiển (cap_10) — phát hiện kênh điều khiển bị mã hóa tầng ứng dụng.
 - [ ] Dịch ngược lớp mã hóa 0x92/0x03/0xf8 (APK/Frida) — việc lớn, để sau.
+
+### ĐÍNH CHÍNH cap_10 (quan trọng): KHÔNG phải mã hóa — là ĐỌC THAM SỐ theo hash
+Kết luận "kênh điều khiển bị mã hóa" ở trên là SAI. Kiểm tra lại với dissector:
+- `0x02→0x92 set 0x03 id 0xf8` = **"Config Table: Read Param By Hash"** (dji-dumlv1-flyc.lua) — app
+  ĐỌC tham số cấu hình theo mã băm. Request = danh sách hash 4 byte (len/4 hash).
+- Đếm thực tế: 3700 hash nhưng chỉ **48 hash KHÁC NHAU**, mỗi hash lặp ~80 lần → đúng là polling
+  48 tham số lặp đi lặp lại. Nếu mã hóa thì phải ~3700 hash duy nhất. Vậy **plaintext hoàn toàn**,
+  chỉ trông ngẫu nhiên vì hash 4 byte trông như byte ngẫu nhiên. "Khối lặp lại" chính là các hash.
+- => RÚT LẠI: KHÔNG có bằng chứng mã hóa. Telemetry + video + kênh đọc-tham-số đều plaintext.
+
+**Trạng thái đúng của lệnh điều khiển:** VẪN CHƯA tìm ra (không phải vì mã hóa).
+- Không frame nào chỉ xuất hiện lúc đẩy cần (mọi loại có mặt đều ở cả hover lẫn lúc đẩy).
+- Frame liên tục tốc độ cao nhất app→drone là `0x02→0xa9 set 0x01 id 0x0a` (28B, ~20Hz) — ứng viên
+  virtual-RC. Nhưng khi đẩy cần, chỉ byte [20:22] đổi (= bộ đếm 16-bit lăn), 25 byte còn lại KHÔNG
+  đổi → frame này KHÔNG mang giá trị cần (hoặc mang theo cách chưa rõ).
+- Giả thuyết: điều khiển tay trong DJI Fly đi qua một đường khác chưa nhận ra; HOẶC giá trị cần được
+  đóng gói/che trong vùng mình chưa tách đúng. Cần: (a) bài bay đẩy cần MẠNH & lâu hơn, hoặc
+  (b) dịch ngược APK tìm hàm dựng frame `0xa9/0x01/0x0a` (có key SDK `JoystickControlMode`,
+  `VirtualJoyStick`).
+
+- [x] ĐÍNH CHÍNH: 0x03/0xf8 là đọc-tham-số-theo-hash, không mã hóa.
+- [ ] Tìm lệnh điều khiển thật — còn mở.
