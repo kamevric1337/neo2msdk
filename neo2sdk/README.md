@@ -50,7 +50,14 @@ Ví dụ đầy đủ: `examples/read_telemetry.py`, `examples/save_video.py`.
 | `FlightControllerKey.Velocity` | Velocity3D (NED) | cap_09 (vgz) |
 | `FlightControllerKey.Compass` | float (độ) | cap_08 |
 | `FlightControllerKey.FlightState` | int | cap_09 |
+| `FlightControllerKey.Status` | FlightStatus (cờ bay) | cap_09 (in_air/motors) |
+| `FlightControllerKey.IsFlying` / `.AreMotorsOn` | bool | cap_09 |
+| `FlightControllerKey.Location` / `.SatelliteCount` | GpsLocation / int | 🟡 cần bay ngoài trời |
+| `FlightControllerKey.UltrasonicHeight` | float (m) | 🟡 |
 | `GimbalKey.Attitude` | GimbalAttitude(pitch,quat) | cap_06/07 |
+
+Toàn bộ frame OSD General được giải mã theo **layout chuẩn DJI** (pitch/roll/yaw, độ cao, vận tốc,
+GPS, vệ tinh, cờ in_air/motor/gps…). Các trường 🟡 đã nối dây sẵn, sẽ có giá trị khi bay ngoài trời.
 
 ## Đường ghi (điều khiển)
 

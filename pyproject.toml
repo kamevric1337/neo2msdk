@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neo2sdk"
+version = "0.1.0"
+description = "MSDK tự xây cho DJI Neo 2 (reverse-engineer giao thức). Đường đọc telemetry + video."
+readme = "neo2sdk/README.md"
+requires-python = ">=3.9"
+license = { text = "Nghiên cứu/giáo dục" }
+# Lõi SDK (đọc telemetry + video, dựng lệnh) chỉ dùng thư viện chuẩn Python —
+# không cần phụ thuộc ngoài. Các phần phân tích/Frida dùng thêm tool riêng.
+dependencies = []
+
+[project.optional-dependencies]
+analysis = ["numpy", "capstone", "pyelftools"]   # cho poc/ và dịch ngược APK
+frida = ["frida-tools"]                           # cho tools/frida
+
+[tool.setuptools]
+packages = ["neo2sdk", "neo2sdk.transport", "neo2sdk.core", "neo2sdk.keys"]

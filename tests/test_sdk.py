@@ -121,6 +121,30 @@ def test_frame_decode_battery():
     assert info.current_ma == -650 and info.remain_mah == 1000
 
 
+def test_osd_full_decode():
+    # dựng frame OSD với GPS + cờ in_air/motor + vệ tinh, decode lại
+    import math
+    import struct
+    from neo2sdk.keys import FlightControllerKey
+    p = bytearray(42)
+    struct.pack_into("<d", p, 0, math.radians(105.8))    # longitude
+    struct.pack_into("<d", p, 8, math.radians(21.0))     # latitude
+    struct.pack_into("<h", p, 16, 125)                   # height 12.5m
+    struct.pack_into("<h", p, 24, 0)                     # pitch
+    struct.pack_into("<h", p, 28, 900)                   # yaw 90°
+    p[30] = 43                                           # flyc_state
+    struct.pack_into("<I", p, 32, 0x04 | 0x08 | 0x8000)  # in_air+motor+gps_used
+    p[36] = 14                                           # 14 vệ tinh
+    f = list(iter_frames(build_frame(0x03, 0x02, 0x03, 0x43, bytes(p))))[0]
+    u = dict(decode_telemetry(f))
+    loc = u[FlightControllerKey.Location]
+    assert abs(loc.latitude - 21.0) < 1e-4 and abs(loc.longitude - 105.8) < 1e-4, loc
+    st = u[FlightControllerKey.Status]
+    assert st.in_air and st.motors_on and st.gps_used and st.satellites == 14, st
+    assert u[FlightControllerKey.IsFlying] is True
+    assert abs(u[FlightControllerKey.Altitude] - 12.5) < 1e-6
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = 0

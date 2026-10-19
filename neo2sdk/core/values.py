@@ -35,3 +35,28 @@ class BatteryInfo:
 class GimbalAttitude:
     pitch: float           # độ; âm = chúc xuống
     quaternion: tuple      # (w, x, y, z) hoặc None
+
+
+@dataclass
+class GpsLocation:
+    """Vị trí GPS (độ). CHƯA kiểm chứng — cần bay ngoài trời có tín hiệu."""
+    latitude: float
+    longitude: float
+
+
+@dataclass
+class FlightStatus:
+    """Trạng thái bay, bóc từ OSD controller_state (layout chuẩn DJI).
+
+    flyc_state, in_air, motors_on đã kiểm chứng (cap_09). Phần GPS chưa (trong nhà).
+    """
+    flyc_state: int
+    in_air: bool
+    on_ground: bool
+    motors_on: bool
+    gps_used: bool
+    gps_level: int         # 0-5, mức tín hiệu GPS
+    satellites: int        # số vệ tinh
+    gohome_state: int
+    battery_req_gohome: bool
+    battery_req_land: bool

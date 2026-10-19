@@ -31,6 +31,12 @@ class FlightControllerKey:
     Velocity = Key("FlightController", "Velocity")          # Velocity3D m/s (NED)
     Compass = Key("FlightController", "CompassHeading")     # float, độ (= yaw)
     FlightState = Key("FlightController", "FlightState")    # int (flyc_state)
+    Status = Key("FlightController", "Status")              # FlightStatus (cờ bay)
+    Location = Key("FlightController", "Location")          # GpsLocation (🟡 chưa kiểm chứng)
+    SatelliteCount = Key("FlightController", "SatelliteCount")   # int (🟡)
+    IsFlying = Key("FlightController", "IsFlying")          # bool
+    AreMotorsOn = Key("FlightController", "AreMotorsOn")    # bool
+    UltrasonicHeight = Key("FlightController", "UltrasonicHeight")  # float m (cảm biến siêu âm)
 
 
 class BatteryKey:
@@ -51,7 +57,10 @@ class ControlKey:
 ALL_READABLE = [
     FlightControllerKey.Attitude, FlightControllerKey.Altitude,
     FlightControllerKey.Velocity, FlightControllerKey.Compass,
-    FlightControllerKey.FlightState,
+    FlightControllerKey.FlightState, FlightControllerKey.Status,
+    FlightControllerKey.Location, FlightControllerKey.SatelliteCount,
+    FlightControllerKey.IsFlying, FlightControllerKey.AreMotorsOn,
+    FlightControllerKey.UltrasonicHeight,
     BatteryKey.Info, BatteryKey.PercentRemaining,
     GimbalKey.Attitude,
 ]
