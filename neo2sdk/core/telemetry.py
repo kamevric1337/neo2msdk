@@ -10,8 +10,9 @@ import math
 import struct
 
 import math as _math
+import re as _re
 
-from ..keys.keys import BatteryKey, FlightControllerKey, GimbalKey
+from ..keys.keys import BatteryKey, FlightControllerKey, GimbalKey, SystemKey
 from ..transport.duml import DumlFrame
 from .values import (Attitude, BatteryInfo, FlightStatus, GimbalAttitude,
                      GpsLocation, Velocity3D)
@@ -87,6 +88,19 @@ def decode(frame: DumlFrame):
                 battery_req_gohome=bool(cstate & 0x200),
                 battery_req_land=bool(cstate & 0x400),
             )))
+        return out
+
+    # Báo cáo nhiệt độ linh kiện (text, module 0x28). Tự mô tả: "label: v1, v2, ...".
+    # Giá trị là 0.1°C. Xem notes/capture-log.md (định danh module 0x28).
+    if src == 0x28 and cs == 0x00 and ci == 0x10 and b"temperature" in p:
+        txt = bytes(c if 32 <= c < 127 else 0x20 for c in p).decode("latin1")
+        temps = {}
+        for name, vals in _re.findall(r"([a-z][a-z0-9_]{1,15}):\s*([\d,\s]+)", txt):
+            nums = [int(x) / 10.0 for x in _re.findall(r"\d+", vals)]
+            if nums and name not in ("temperature", "temperature_group"):
+                temps[name] = nums
+        if temps:
+            out.append((SystemKey.ComponentTemperatures, temps))
         return out
 
     return out

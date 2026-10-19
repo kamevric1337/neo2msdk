@@ -145,6 +145,15 @@ def test_osd_full_decode():
     assert abs(u[FlightControllerKey.Altitude] - 12.5) < 1e-6
 
 
+def test_component_temperatures():
+    from neo2sdk.keys import SystemKey
+    text = b"[temperature]: temperature_group: imu: 299, esc: 635, 635, baro: 362, "
+    f = list(iter_frames(build_frame(0x28, 0x02, 0x00, 0x10, text)))[0]
+    u = dict(decode_telemetry(f))
+    t = u[SystemKey.ComponentTemperatures]
+    assert t["imu"] == [29.9] and t["baro"] == [36.2] and t["esc"] == [63.5, 63.5], t
+
+
 def test_control_scaffold():
     from neo2sdk.core.control import JoystickConfig
     c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()

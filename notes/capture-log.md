@@ -395,7 +395,7 @@ Các field "cùng dấu ở cả xuống và lên" (vd. 0x04/0x05 off=9 = 0/1638
 khỏi vị trí giữa", không phải góc có dấu.
 
 - [x] Gán trường gimbal pitch (việc Ngày 5) — xong, xác nhận bằng 2 trường độc lập.
-- [ ] Gán trường hướng drone (yaw/pitch/roll IMU) — xoay drone bằng tay khi tắt động cơ (chưa làm).
+- [x] Gán trường hướng drone (yaw/pitch/roll) — ĐÃ LÀM ở cap_08 (checkbox cũ).
 
 ## cap_07_gimbal2.pcap — lặp lại cap_06 để xác nhận trường gimbal
 - Bắt đầu ghi: 2026-10-02 16:18:51, tcpdump PID 9492, `/sdcard/cap_07_gimbal2.pcap`. Drone yên dưới đất.
@@ -667,3 +667,10 @@ tay của DJI Fly KHÔNG đi qua đường SDK công khai. Nhưng đọc symbol 
 
 - [x] Đào APK tìm hàm dựng lệnh điều khiển — tìm ra kiến trúc (auth + MobileRCHandler::SendCmd, 4 float).
 - [ ] Lấy frame DUML điều khiển cụ thể — cần Frida hook động (buổi sau).
+
+### Phân tích thêm (offline): module 0x28 báo cáo nhiệt độ linh kiện (text)
+Frame 0x28/0x00/0x10 (len 242) là báo cáo nhiệt độ dạng text, tự mô tả: "label: v1, v2, ...",
+giá trị 0.1°C. Ví dụ cap_09: wifi 66°C, esc 63.5°C, nand 56.2°C, ddr 55.2°C, imu 29.8°C,
+baro 36.2°C, sens 39°C, e3/s2/rf/pd các nhóm. Đã thêm vào SDK: SystemKey.ComponentTemperatures.
+ĐÍNH CHÍNH: "baro" ở đây là NHIỆT ĐỘ cảm biến khí áp (không phải độ cao như nghĩ trước). Cũng
+xác nhận đơn vị nhiệt độ pin là 0.1°C (dải 40-66°C hợp lý cho linh kiện đang chạy).

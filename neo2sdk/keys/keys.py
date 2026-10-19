@@ -48,6 +48,12 @@ class GimbalKey:
     Attitude = Key("Gimbal", "Attitude")                   # GimbalAttitude
 
 
+class SystemKey:
+    # Nhiệt độ linh kiện (°C) từ báo cáo text của module 0x28: dict {tên: [°C,...]}.
+    # Ví dụ: {"imu": [39.9], "esc": [54.6, 54.6, 53.7, 53.7], "baro": [41.4], ...}
+    ComponentTemperatures = Key("System", "ComponentTemperatures")
+
+
 # Đăng ký điều khiển (CHƯA hỗ trợ — frame lệnh cần Frida hook, xem capture-log).
 class ControlKey:
     VirtualStick = Key("FlightController", "VirtualStick", readable=False, writable=True)
@@ -63,4 +69,5 @@ ALL_READABLE = [
     FlightControllerKey.UltrasonicHeight,
     BatteryKey.Info, BatteryKey.PercentRemaining,
     GimbalKey.Attitude,
+    SystemKey.ComponentTemperatures,
 ]
