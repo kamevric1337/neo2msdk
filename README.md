@@ -63,6 +63,7 @@ sdk.start()
 
 ## Tài liệu
 
+- `docs/API.md` — **tài liệu API chi tiết của neo2sdk**.
 - `notes/tien-do-giai-ma.md` — sơ đồ cấu trúc gói + phương pháp + bản chất + ví dụ gói thật.
 - `notes/capture-log.md` — nhật ký chi tiết từng thí nghiệm (pin, gimbal, hướng, bay, Frida…).
 - `notes/bao-cao-ngay-3-6.md` — báo cáo lab.
