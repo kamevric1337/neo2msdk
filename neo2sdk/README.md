@@ -65,9 +65,10 @@ GPS, vệ tinh, cờ in_air/motor/gps…). Các trường 🟡 đã nối dây s
   `sdk.request_iframe()` gửi khi `connect("udp")`). Frame dựng ra **trùng y hệt từng byte**
   frame thật của DJI Fly (xem `tests/test_sdk.py::test_request_iframe_byte_exact`).
   Encoder đầy đủ: `transport.build_frame` / `build_outer` / `build_duml_app_packet`.
-- **Điều khiển bay** (`ControlKey.VirtualStick`) — CHƯA: frame lệnh cần lấy qua Frida hook
-  động (kiến trúc: `RequestJoystickControlAuth` + `MobileRCHandler::SendCmd`, 4 float).
-  Xem `notes/capture-log.md`.
+- **Điều khiển bay** — khung API đã sẵn (`sdk.flight_control.send_virtual_stick(throttle,
+  yaw, pitch, roll)`, `request_control_authority()`), đúng hình dạng tìm trong APK (4 float
+  + auth). Nhưng **frame DUML chưa biết** → các hàm này báo "cần Frida". Lấy frame bằng
+  `tools/frida/duml_sniff.js` khi đẩy cần, rồi điền hàm dựng byte (như đã làm với keyframe).
 - **GPS, vận tốc ngang** — cần bay ngoài trời / bay ngang để kiểm chứng.
 
 ## Kiểm thử

@@ -145,6 +145,20 @@ def test_osd_full_decode():
     assert abs(u[FlightControllerKey.Altitude] - 12.5) < 1e-6
 
 
+def test_control_scaffold():
+    from neo2sdk.core.control import JoystickConfig
+    c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()
+    assert c.throttle == 1.0 and c.yaw == -1.0, "phải kẹp về [-1,1]"
+    sdk = MSDKManager()
+    assert sdk.flight_control is not None
+    raised = False
+    try:
+        sdk.flight_control.send_virtual_stick(yaw=0.5)
+    except NotImplementedError:
+        raised = True
+    assert raised, "send_virtual_stick phải báo chưa hỗ trợ (cần Frida)"
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = 0
