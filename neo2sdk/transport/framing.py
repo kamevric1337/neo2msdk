@@ -40,6 +40,43 @@ class OuterPacket:
         return CHANNEL_NAME.get(self.channel, f"0x{self.channel:02x}")
 
 
+# Khối hằng số 16 byte (byte 16-31) của kênh DUML — quan sát cố định trên mọi gói.
+# Chưa rõ nghĩa (xem notes/tien-do-giai-ma.md mục 4) nhưng app gửi nguyên như vậy.
+DUML_SUBHEADER_CONST = bytes.fromhex("785d785d00000000785d785d00000000")
+
+
+def _xor7(buf) -> int:
+    chk = 0
+    for i in range(7):
+        chk ^= buf[i]
+    return chk
+
+
+def build_outer(channel: int, body: bytes, session_id: int,
+                video_seq: int = 0, video_ack: int = 0) -> bytes:
+    """Dựng một gói UDP 9003: 16 byte header chung + body, tự tính độ dài & checksum."""
+    total = 16 + len(body)
+    pkt = bytearray(16)
+    struct.pack_into("<H", pkt, 0, (total & 0x7FFF) | 0x8000)
+    struct.pack_into("<H", pkt, 2, session_id & 0xFFFF)
+    struct.pack_into("<H", pkt, 4, video_seq & 0xFFFF)
+    pkt[6] = channel
+    if channel == CH_DUML_APP:
+        struct.pack_into("<H", pkt, 8, video_ack & 0xFFFF)
+        struct.pack_into("<H", pkt, 10, video_ack & 0xFFFF)
+    pkt[7] = _xor7(pkt)
+    return bytes(pkt) + body
+
+
+def build_duml_app_packet(frame: bytes, session_id: int, video_ack: int = 0) -> bytes:
+    """Dựng gói app→drone hoàn chỉnh mang một (hoặc nhiều) khung DUML.
+
+    body = [16 byte hằng số][2 byte độ dài][các khung DUML].
+    """
+    inner = DUML_SUBHEADER_CONST + struct.pack("<H", len(frame)) + frame
+    return build_outer(CH_DUML_APP, inner, session_id, video_ack=video_ack)
+
+
 def parse_outer(payload: bytes) -> OuterPacket | None:
     """Bóc header ngoài của một payload UDP cổng 9003. None nếu không hợp lệ."""
     if len(payload) < 16:

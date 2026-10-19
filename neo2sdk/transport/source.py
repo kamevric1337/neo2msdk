@@ -64,6 +64,8 @@ class UdpSource:
     giai đoạn PoC chủ yếu dùng PcapSource; UdpSource để dành khi tích hợp thật.
     """
 
+    DRONE_ADDR = ("192.168.2.1", DUML_PORT)
+
     def __init__(self, bind_host: str = "0.0.0.0", bind_port: int = DUML_PORT):
         self.bind_host = bind_host
         self.bind_port = bind_port
@@ -79,6 +81,12 @@ class UdpSource:
                 yield time.time(), data
         finally:
             self._sock.close()
+
+    def send(self, packet: bytes):
+        """Gửi một gói tới drone (dùng cho đường điều khiển khi đã kết nối live)."""
+        if self._sock is None:
+            raise RuntimeError("UdpSource chưa mở socket (phải start() trước).")
+        self._sock.sendto(packet, self.DRONE_ADDR)
 
     def close(self):
         if self._sock:

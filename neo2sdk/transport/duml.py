@@ -54,6 +54,32 @@ class DumlFrame:
         return (self.src, self.dst, self.cmd_set, self.cmd_id)
 
 
+def build_frame(src, dst, cmd_set, cmd_id, payload=b"", seq=0,
+                encrypt=0, ack=0, pack_type=0):
+    """Dựng một khung DUML v1 hợp lệ (tự tính CRC8 header + CRC16 cuối).
+
+    cfg byte (offset 8) = encrypt(3 bit) | ack(2 bit) | pack_type(1 bit) — mặc định 0
+    (không mã hóa, không cần ACK, request). Dùng cho đường điều khiển (vd xin keyframe).
+    """
+    length = 11 + len(payload) + 2
+    if length > 0x3FF:
+        raise ValueError("payload quá dài cho DUML v1")
+    cfg = (encrypt & 0x07) | ((ack & 0x03) << 5) | ((pack_type & 0x01) << 7)
+    hdr = bytearray(11)
+    hdr[0] = DELIMITER
+    # byte 1-2 = độ dài (10 bit) | protocol_version (6 bit cao). Neo 2 dùng version = 1.
+    struct.pack_into("<H", hdr, 1, (length & 0x3FF) | (1 << 10))
+    hdr[3] = crc8(hdr[0:3])
+    hdr[4] = src
+    hdr[5] = dst
+    struct.pack_into("<H", hdr, 6, seq & 0xFFFF)
+    hdr[8] = cfg
+    hdr[9] = cmd_set
+    hdr[10] = cmd_id
+    frame = bytes(hdr) + payload
+    return frame + struct.pack("<H", crc16(frame))
+
+
 def iter_frames(buf: bytes, start: int = 0, _depth: int = 0):
     """Sinh mọi DumlFrame hợp lệ (qua CRC8 + CRC16) trong buf, kể cả frame lồng.
 

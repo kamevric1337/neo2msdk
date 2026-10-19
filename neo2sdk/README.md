@@ -52,12 +52,20 @@ Ví dụ đầy đủ: `examples/read_telemetry.py`, `examples/save_video.py`.
 | `FlightControllerKey.FlightState` | int | cap_09 |
 | `GimbalKey.Attitude` | GimbalAttitude(pitch,quat) | cap_06/07 |
 
-## Chưa hỗ trợ
-- **Điều khiển bay** (`ControlKey.VirtualStick`) — frame lệnh cần lấy qua Frida hook
+## Đường ghi (điều khiển)
+
+- **Xin keyframe** — ✅ **dựng byte chính xác** (`sdk.build_request_iframe()` offline;
+  `sdk.request_iframe()` gửi khi `connect("udp")`). Frame dựng ra **trùng y hệt từng byte**
+  frame thật của DJI Fly (xem `tests/test_sdk.py::test_request_iframe_byte_exact`).
+  Encoder đầy đủ: `transport.build_frame` / `build_outer` / `build_duml_app_packet`.
+- **Điều khiển bay** (`ControlKey.VirtualStick`) — CHƯA: frame lệnh cần lấy qua Frida hook
   động (kiến trúc: `RequestJoystickControlAuth` + `MobileRCHandler::SendCmd`, 4 float).
   Xem `notes/capture-log.md`.
-- **Xin keyframe** (`ControlKey.RequestIFrame`) — đã biết frame (`0x02→0x09 0x01/0x01`,
-  bit 0x20), nhưng gửi gói thuộc đường điều khiển, chưa nối dây.
 - **GPS, vận tốc ngang** — cần bay ngoài trời / bay ngang để kiểm chứng.
+
+## Kiểm thử
+
+`python tests/test_sdk.py` — 9 test: round-trip encode/decode (frame DUML, header ngoài,
+tunnel lồng), lệnh xin keyframe **trùng byte** frame thật, và giải mã telemetry trên pcap thật.
 
 Nền tảng giao thức: `notes/tien-do-giai-ma.md`, `notes/capture-log.md`.

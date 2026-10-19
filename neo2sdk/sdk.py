@@ -31,6 +31,8 @@ class MSDKManager:
         self._source = None
         self._thread = None
         self._running = False
+        self.session_id = 0        # cập nhật từ gói đến; cần để dựng lệnh gửi đi
+        self._seq = 0              # bộ đếm seq cho khung gửi đi
         # thống kê
         self.stats = {"packets": 0, "duml_frames": 0, "telemetry_updates": 0, "video_packets": 0}
 
@@ -59,6 +61,7 @@ class MSDKManager:
             if outer is None:
                 continue
             self.stats["packets"] += 1
+            self.session_id = outer.session_id   # theo dõi phiên hiện tại (để dựng lệnh gửi)
             if outer.channel == CH_VIDEO:
                 self.stats["video_packets"] += 1
                 self.video.feed(outer)
@@ -88,3 +91,24 @@ class MSDKManager:
         self._running = False
         if self._thread:
             self._thread.join(timeout=2)
+
+    # --- đường ghi (điều khiển) ---
+    def build_request_iframe(self, request: bool = True) -> bytes:
+        """Dựng gói xin keyframe cho phiên hiện tại (không gửi). Dùng được offline."""
+        from .core.commands import request_iframe_packet
+        self._seq = (self._seq + 1) & 0xFFFF
+        return request_iframe_packet(self.session_id, seq=self._seq, request=request)
+
+    def request_iframe(self, request: bool = True):
+        """Dựng + GỬI lệnh xin keyframe (cần đã connect "udp" với drone thật).
+
+        Đây là lệnh điều khiển DUY NHẤT hiện đã giải mã trọn vẹn và dựng byte chính
+        xác (trùng y hệt app, xem tests). Các lệnh khác chờ Frida.
+        """
+        pkt = self.build_request_iframe(request)
+        if isinstance(self._source, UdpSource):
+            self._source.send(pkt)
+            return True
+        raise RuntimeError(
+            "Chưa kết nối live: request_iframe() cần connect('udp') với drone. "
+            "Dùng build_request_iframe() để lấy byte gói mà không gửi.")
