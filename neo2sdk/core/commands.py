@@ -18,6 +18,7 @@ from ..transport.framing import build_duml_app_packet
 APP = 0x02
 VIDEO_MCU = 0x09   # "HD transmission MCU air side"
 GIMBAL = 0x04      # module gimbal
+CAMERA = 0x01      # module camera (nhận cmd_set 0x02)
 
 # Lệnh gimbal: giá trị tốc độ mỗi trục bão hòa ở ±200 (quan sát khi kéo thanh hết cỡ).
 GIMBAL_SPEED_MAX = 200
@@ -57,3 +58,16 @@ def gimbal_speed_packet(session_id: int, yaw: int = 0, roll: int = 0,
                         pitch: int = 0, seq: int = 0) -> bytes:
     """Gói UDP 9003 hoàn chỉnh để gửi lệnh tốc độ gimbal tới drone."""
     return build_duml_app_packet(gimbal_speed_frame(yaw, roll, pitch, seq), session_id)
+
+
+def shoot_photo_frame(seq: int = 0, mode: int = 0x01) -> bytes:
+    """Khung DUML chụp ảnh: 0x02→0x01 set 0x02 id 0x01 (Camera / Shoot Photo).
+
+    payload 1 byte = mode (quan sát = 0x01 khi bấm nút chụp đơn). Xem notes (Ngày 9).
+    """
+    return build_frame(APP, CAMERA, 0x02, 0x01, bytes([mode & 0xFF]), seq=seq)
+
+
+def shoot_photo_packet(session_id: int, seq: int = 0, mode: int = 0x01) -> bytes:
+    """Gói UDP 9003 hoàn chỉnh để gửi lệnh chụp ảnh tới drone."""
+    return build_duml_app_packet(shoot_photo_frame(seq, mode), session_id)

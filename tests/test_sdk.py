@@ -187,6 +187,29 @@ def test_gimbal_control_build():
     assert raised, "send gimbal phải báo cần connect('udp')"
 
 
+def test_shoot_photo_frame():
+    from neo2sdk.core.commands import shoot_photo_frame
+    f = list(iter_frames(shoot_photo_frame(seq=3)))[0]
+    assert f.key() == (0x02, 0x01, 0x02, 0x01), f.key()
+    assert f.payload == b"\x01", f.payload.hex()   # khớp mẫu thật (bấm chụp = 01)
+
+
+def test_camera_control_build():
+    sdk = MSDKManager()
+    sdk.session_id = 0xabb1
+    pkt = sdk.camera_control.build_shoot_photo()
+    o = parse_outer(pkt)
+    assert o is not None and o.checksum_ok
+    frames = list(iter_frames(o.body, 18))
+    assert any(f.key() == (0x02, 0x01, 0x02, 0x01) for f in frames)
+    raised = False
+    try:
+        sdk.camera_control.shoot_photo()
+    except RuntimeError:
+        raised = True
+    assert raised, "shoot_photo phải báo cần connect('udp')"
+
+
 def test_control_scaffold():
     from neo2sdk.core.control import JoystickConfig
     c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()

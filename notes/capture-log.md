@@ -726,3 +726,13 @@ Drone trong nhà: tcpdump qua adb, đọc OSD General (0x03 id 0x43). Kết qu�
     thật khi drone đủ sat để fix (gần cửa sổ/ngoài trời).
   - height i16 [16:18] = 0 → đang dưới đất, khớp.
 Lưu ý: "GPS sai số 20-30m" user thấy là GPS của ĐIỆN THOẠI, không phải của drone Neo 2.
+
+## Ngày 9 (tiếp) — lệnh CHỤP ẢNH
+
+tcpdump khi bấm nút chụp (DJI Fly phải ở Manual mode — Follow mode thì nút Start = cất cánh, tránh).
+So tập key với baseline: ĐÚNG MỘT key mới, xuất hiện 1 lần đúng lúc bấm (19.6s):
+  0x02→0x01 set 0x02 id 0x01, payload = 01 (1 byte).
+Khớp chuẩn DJI DUML: cmd_set 0x02 = Camera, cmd_id 0x01 = Shoot Photo; dst 0x01 = module camera.
+Đã thêm: core/commands.py::shoot_photo_frame/packet, core/control.py::CameraControl
+(sdk.camera_control.shoot_photo()). Test 16/16 PASS (thêm test_shoot_photo_frame khớp payload,
+test_camera_control_build). CÒN THIẾU: quay video start/stop (cần chụp lần sau ở Video mode).

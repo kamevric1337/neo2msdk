@@ -28,9 +28,10 @@ class MSDKManager:
     def __init__(self):
         self.key_manager = KeyManager()
         self.video = VideoDecoder()
-        from .core.control import FlightControl, GimbalControl
+        from .core.control import CameraControl, FlightControl, GimbalControl
         self.flight_control = FlightControl(self)
         self.gimbal_control = GimbalControl(self)
+        self.camera_control = CameraControl(self)
         self._source = None
         self._thread = None
         self._running = False

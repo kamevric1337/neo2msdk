@@ -73,6 +73,9 @@ còn lại đã nối dây sẵn, sẽ có giá trị khi đủ điều kiện.
   `0x02→0x04 set 0x04 id 0x0c`, payload = yaw|roll|pitch (i16 LE) | 0x80 | 0x00; tốc độ mỗi
   trục bão hòa ±200. Kiểm chứng bằng tcpdump khi kéo thanh gimbal (Ngày 9). GỬI cần
   `connect('udp')` (PC cùng mạng drone); dựng byte thì offline cũng được.
+- **Chụp ảnh** — ✅ **đã giải mã + dựng byte** (`sdk.camera_control.shoot_photo()`). Frame
+  `0x02→0x01 set 0x02 id 0x01`, payload `01` (Camera / Shoot Photo chuẩn DJI). Kiểm chứng
+  bằng tcpdump khi bấm nút chụp (Ngày 9). GỬI cần `connect('udp')`.
 - **Điều khiển bay** — khung API đã sẵn (`sdk.flight_control.send_virtual_stick(throttle,
   yaw, pitch, roll)`, `request_control_authority()`), đúng hình dạng tìm trong APK (4 float
   + auth). Nhưng **frame DUML chưa biết** (phải bay mới bắt được) → các hàm này báo "cần

@@ -90,3 +90,23 @@ class GimbalControl:
     def stop(self):
         """Dừng gimbal (tốc độ 0 mọi trục)."""
         return self.send_speed(0, 0, 0)
+
+
+class CameraControl:
+    """Điều khiển camera. Gắn vào MSDKManager qua `sdk.camera_control`.
+
+    `shoot_photo` đã giải mã (0x02→0x01 set 0x02 id 0x01). GỬI cần `connect('udp')`.
+    """
+
+    def __init__(self, manager):
+        self._mgr = manager
+
+    def build_shoot_photo(self, mode: int = 0x01) -> bytes:
+        """Dựng gói chụp ảnh cho phiên hiện tại (không gửi)."""
+        from .commands import shoot_photo_packet
+        self._mgr._seq = (self._mgr._seq + 1) & 0xFFFF
+        return shoot_photo_packet(self._mgr.session_id, seq=self._mgr._seq, mode=mode)
+
+    def shoot_photo(self, mode: int = 0x01):
+        """Dựng + GỬI lệnh chụp ảnh. Cần connect('udp')."""
+        return self._mgr._send(self.build_shoot_photo(mode))
