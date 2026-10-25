@@ -9,12 +9,19 @@ khi đã kết nối drone thật.
 """
 from __future__ import annotations
 
+import struct
+
 from ..transport.duml import build_frame
 from ..transport.framing import build_duml_app_packet
 
 # Địa chỉ module (xem notes)
 APP = 0x02
 VIDEO_MCU = 0x09   # "HD transmission MCU air side"
+GIMBAL = 0x04      # module gimbal
+
+# Lệnh gimbal: giá trị tốc độ mỗi trục bão hòa ở ±200 (quan sát khi kéo thanh hết cỡ).
+GIMBAL_SPEED_MAX = 200
+GIMBAL_CTRL_FLAG = 0x80   # byte[6], cố định trên mọi mẫu (cờ bật điều khiển)
 
 
 def request_iframe_frame(seq: int = 0, request: bool = True) -> bytes:
@@ -31,3 +38,22 @@ def request_iframe_frame(seq: int = 0, request: bool = True) -> bytes:
 def request_iframe_packet(session_id: int, seq: int = 0, request: bool = True) -> bytes:
     """Gói UDP 9003 hoàn chỉnh để gửi lệnh xin keyframe tới drone."""
     return build_duml_app_packet(request_iframe_frame(seq, request), session_id)
+
+
+def gimbal_speed_frame(yaw: int = 0, roll: int = 0, pitch: int = 0, seq: int = 0) -> bytes:
+    """Khung DUML điều khiển tốc độ gimbal: 0x02→0x04 set 0x04 id 0x0c.
+
+    payload 8 byte: yaw(i16 LE) | roll(i16 LE) | pitch(i16 LE) | 0x80 | 0x00.
+    Mỗi trục là tốc độ, hết cỡ ở ±GIMBAL_SPEED_MAX (±200). Dương = lên, âm = xuống
+    (kiểm chứng: kéo thanh pitch xuống → âm dần tới -200, kéo lên → dương tới +200;
+    yaw/roll giữ 0 khi chỉ động pitch). Xem notes/capture-log.md (Ngày 9).
+    """
+    c = lambda v: max(-GIMBAL_SPEED_MAX, min(GIMBAL_SPEED_MAX, int(v)))
+    payload = struct.pack("<hhh", c(yaw), c(roll), c(pitch)) + bytes([GIMBAL_CTRL_FLAG, 0x00])
+    return build_frame(APP, GIMBAL, 0x04, 0x0c, payload, seq=seq)
+
+
+def gimbal_speed_packet(session_id: int, yaw: int = 0, roll: int = 0,
+                        pitch: int = 0, seq: int = 0) -> bytes:
+    """Gói UDP 9003 hoàn chỉnh để gửi lệnh tốc độ gimbal tới drone."""
+    return build_duml_app_packet(gimbal_speed_frame(yaw, roll, pitch, seq), session_id)

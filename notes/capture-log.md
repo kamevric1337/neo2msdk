@@ -681,3 +681,37 @@ về PC qua `adb exec-out`, parse tại chỗ). Vì PC không nằm trên đư�
 trên điện thoại. Kiểm chứng: pin 83% 8.117V, tư thế/gimbal/nhiệt độ linh kiện/trạng thái đều live,
 ~800 cập nhật telemetry / 6s. `MSDKManager.connect("adb")` + `examples/live_read.py`. Mục tiêu
 Phase 1 "đọc telemetry không cần DJI Fly diễn giải" — ĐẠT (DJI Fly chạy để tạo luồng, SDK giải mã độc lập).
+
+# Ngày 9 — giải mã LỆNH ĐIỀU KHIỂN GIMBAL (write path thật đầu tiên ngoài keyframe)
+
+Mục tiêu: bắt lệnh điều khiển mà KHÔNG cần bay (drone dưới đất, ở nhà). Chọn gimbal vì DJI Fly
+gửi lệnh gimbal ngay khi kéo thanh trên màn hình camera.
+
+**Frida thất bại — DJI Fly có CHỐNG DEBUG.** Hook sendto/sendmsg qua frida (`tools/frida/run_sniff.py`
++ `duml_sniff.js`) chạy được ~6s rồi app TỰ THOÁT; attach lại thì app đã chết. Kết luận: dji.go.v5
+phát hiện frida bám → tự kill. (Đã sửa 2 lỗi script khi thử: sendmsg phải đọc msg_iov chứ không
+phải args[1] trực tiếp; frida 17 bỏ `Module.findExportByName` tĩnh, dùng `Process.getModuleByName().findExportByName`.)
+
+**Chuyển sang tcpdump thuần — thành công.** `tools/duml_tx_watch.py`: dùng `AdbTcpdumpSource` (không
+tiêm vào app nên không kích chống debug), lọc kênh app→drone (0x04), bỏ nhiễu (tunnel telemetry
+0x51/0x01 và nhịp tim 0x01/0x0a — bộ đếm thời gian tăng liên tục), dedup theo (cmd_set,cmd_id),
+chỉ in khi payload đổi. Bắt 30s trong khi user kéo thanh pitch chậm (xuống hết → lên hết).
+
+**Kết quả — LỆNH GIMBAL:** `0x02→0x04 set 0x04 id 0x0c`, len 8:
+  payload = yaw(i16 LE) | roll(i16 LE) | pitch(i16 LE) | 0x80 | 0x00
+  - Kiểm chứng: yaw/roll luôn 0 (chỉ động pitch); pitch ramp MƯỢT -200→+200, bão hòa đúng ±200
+    (kéo hết cỡ) → đây là lệnh TỐC ĐỘ kiểu joystick, không phải góc tuyệt đối.
+  - byte[6]=0x80 cố định (cờ bật điều khiển), byte[7]=0x00. 342 frame trong 30s (tần số cao khi kéo).
+  - Dương = ngẩng lên, âm = cúi xuống.
+Các frame set=0x04 khác KHÔNG phải điều khiển: id 0x10 (len1, =0x9c), id 0x77 (len1, =0x00),
+id 0x12 (len9/13, 2 payload cố định luân phiên) — đều định kỳ, payload không đổi theo tay.
+
+Đã thêm vào SDK: `core/commands.py::gimbal_speed_frame/gimbal_speed_packet`,
+`core/control.py::GimbalControl` (`sdk.gimbal_control.set_pitch(s∈[-1,1])` / `.send_speed(yaw,roll,pitch)`
+thô ±200 / `.stop()`), `sdk.py::_send` (gửi app→drone, cần connect('udp')). Test: 14/14 PASS
+(thêm test_gimbal_speed_frame khớp byte payload mẫu thật, test_gimbal_control_build).
+
+LƯU Ý quan trọng: GỬI lệnh tới drone cần PC ở CÙNG MẠNG drone (192.168.2.x, connect('udp')).
+Đường 'adb'/tcpdump chỉ ĐỌC được (bắt gói), KHÔNG gửi được. Chưa thử gửi lệnh gimbal thật.
+CÒN THIẾU: recenter gimbal (chưa tách được frame riêng), và toàn bộ lệnh BAY (takeoff/virtual
+stick — phải bay mới bắt được bằng cùng phương pháp tcpdump).

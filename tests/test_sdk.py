@@ -154,6 +154,39 @@ def test_component_temperatures():
     assert t["imu"] == [29.9] and t["baro"] == [36.2] and t["esc"] == [63.5, 63.5], t
 
 
+def test_gimbal_speed_frame():
+    # payload: yaw|roll|pitch (i16 LE) | 0x80 | 0x00. Chỉ pitch khác 0.
+    from neo2sdk.core.commands import gimbal_speed_frame
+    f = list(iter_frames(gimbal_speed_frame(pitch=-200, seq=7)))[0]
+    assert f.key() == (0x02, 0x04, 0x04, 0x0c), f.key()
+    # khớp byte payload mẫu thật (pitch = -200, hết cỡ xuống): 00 00 00 00 38 ff 80 00
+    assert f.payload == bytes.fromhex("0000000038ff8000"), f.payload.hex()
+    # dương = ngẩng lên, khớp mẫu +200: 00 00 00 00 c8 00 80 00
+    fp = list(iter_frames(gimbal_speed_frame(pitch=200)))[0]
+    assert fp.payload == bytes.fromhex("00000000c8008000"), fp.payload.hex()
+    # kẹp ±200
+    fc = list(iter_frames(gimbal_speed_frame(pitch=9999)))[0]
+    import struct as _s
+    assert _s.unpack_from("<h", fc.payload, 4)[0] == 200
+
+
+def test_gimbal_control_build():
+    sdk = MSDKManager()
+    sdk.session_id = 0xabb1
+    pkt = sdk.gimbal_control.build_speed(pitch=-200)
+    o = parse_outer(pkt)
+    assert o is not None and o.checksum_ok and o.session_id == 0xabb1
+    frames = list(iter_frames(o.body, 18))
+    assert any(f.key() == (0x02, 0x04, 0x04, 0x0c) for f in frames)
+    # gửi khi chưa connect('udp') phải báo lỗi rõ ràng
+    raised = False
+    try:
+        sdk.gimbal_control.set_pitch(0.5)
+    except RuntimeError:
+        raised = True
+    assert raised, "send gimbal phải báo cần connect('udp')"
+
+
 def test_control_scaffold():
     from neo2sdk.core.control import JoystickConfig
     c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()

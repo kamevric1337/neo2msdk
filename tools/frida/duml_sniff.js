@@ -42,8 +42,9 @@ function handlePacket(bytes) {
     const payload = bytes.slice(i + 11, i + flen - 2);
     const key = `${hex(src)}->${hex(dst)} set=${hex(cs)} id=${hex(ci)} len=${payload.length}`;
     const ph = Array.from(payload).map(hex2).join(' ');
-    // frame tunnel 0x51/0x01 không in (chứa telemetry chiều kia); chỉ quan tâm lệnh thật
-    if (!(cs === 0x51 && ci === 0x01) && lastPayload[key] !== ph) {
+    // bỏ nhiễu: tunnel telemetry 0x51/0x01 và nhịp tim 0x01/0x0a (bộ đếm thời gian tăng liên tục)
+    const noise = (cs === 0x51 && ci === 0x01) || (cs === 0x01 && ci === 0x0a);
+    if (!noise && lastPayload[key] !== ph) {
       lastPayload[key] = ph;
       console.log(`[TX] ${key}  ${ph}`);
     }
@@ -54,25 +55,61 @@ function handlePacket(bytes) {
 function hex(n) { return '0x' + n.toString(16).padStart(2, '0'); }
 function hex2(n) { return n.toString(16).padStart(2, '0'); }
 
-function hookSend(name) {
-  const p = Module.findExportByName('libc.so', name);
+// frida 16 có Module.findExportByName(mod,name) tĩnh; frida 17 bỏ, thay bằng
+// Process.getModuleByName(mod).findExportByName(name). Thử cả hai cho tương thích.
+function resolveExport(mod, name) {
+  try { if (typeof Module.findExportByName === 'function') { const p = Module.findExportByName(mod, name); if (p) return p; } } catch (e) {}
+  try { const m = Process.getModuleByName(mod); if (m) return m.findExportByName(name); } catch (e) {}
+  try { if (typeof Module.getGlobalExportByName === 'function') return Module.getGlobalExportByName(name); } catch (e) {}
+  return null;
+}
+
+function readAndHandle(buf, len) {
+  if (len < 34 || len > 4096) return;
+  try {
+    const bytes = new Uint8Array(buf.readByteArray(Math.min(len, 4096)));
+    handlePacket(bytes);
+  } catch (e) {}
+}
+
+// sendto(fd, buf, len, flags, dest, addrlen) / send(fd, buf, len, flags):
+// args[1] = buffer, args[2] = độ dài.
+function hookSendto(name) {
+  const p = resolveExport('libc.so', name);
   if (!p) { console.log('không tìm thấy ' + name); return; }
   Interceptor.attach(p, {
-    onEnter(args) {
-      // sendto(fd, buf, len, flags, dest, addrlen) / send(fd, buf, len, flags)
-      const buf = args[1];
-      const len = args[2].toInt32();
-      if (len < 34 || len > 1600) return;
-      try {
-        const bytes = new Uint8Array(buf.readByteArray(Math.min(len, 1600)));
-        handlePacket(bytes);
-      } catch (e) {}
-    }
+    onEnter(args) { readAndHandle(args[1], args[2].toInt32()); }
   });
   console.log('đã hook ' + name);
 }
 
+// sendmsg(fd, msghdr*, flags): args[1] = struct msghdr*. Trên aarch64:
+//   msg_iov @ +16 (con trỏ mảng iovec), msg_iovlen @ +24.
+//   iovec = { void* iov_base @ +0 ; size_t iov_len @ +8 }.
+// Một datagram UDP thường chỉ có 1 iov; duyệt hết cho chắc.
+function hookSendmsg() {
+  const p = resolveExport('libc.so', 'sendmsg');
+  if (!p) { console.log('không tìm thấy sendmsg'); return; }
+  Interceptor.attach(p, {
+    onEnter(args) {
+      try {
+        const msghdr = args[1];
+        const iov = msghdr.add(16).readPointer();
+        const iovlen = msghdr.add(24).readU64().toNumber();
+        for (let k = 0; k < iovlen && k < 8; k++) {
+          const ent = iov.add(k * 16);
+          const base = ent.readPointer();
+          const len = ent.add(8).readU64().toNumber();
+          readAndHandle(base, len);
+        }
+      } catch (e) {}
+    }
+  });
+  console.log('đã hook sendmsg');
+}
+
 console.log('=== duml_sniff: hook điểm gửi, log frame lệnh app->drone ===');
-console.log('Đẩy MỘT cần chậm từ giữa sang hết cỡ; frame nào payload biến thiên = lệnh điều khiển.');
-hookSend('sendto');
-hookSend('sendmsg');   // phòng khi app dùng sendmsg
+console.log('Thao tác MỘT thứ (vd kéo gimbal) chậm; frame nào payload biến thiên theo tay = lệnh.');
+hookSendto('sendto');
+hookSendto('send');
+hookSendmsg();

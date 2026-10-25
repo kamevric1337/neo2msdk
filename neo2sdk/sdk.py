@@ -28,8 +28,9 @@ class MSDKManager:
     def __init__(self):
         self.key_manager = KeyManager()
         self.video = VideoDecoder()
-        from .core.control import FlightControl
+        from .core.control import FlightControl, GimbalControl
         self.flight_control = FlightControl(self)
+        self.gimbal_control = GimbalControl(self)
         self._source = None
         self._thread = None
         self._running = False
@@ -98,6 +99,16 @@ class MSDKManager:
             self._thread.join(timeout=2)
 
     # --- đường ghi (điều khiển) ---
+    def _send(self, pkt: bytes) -> bool:
+        """Gửi một gói app→drone. Cần connect('udp') (PC ở cùng mạng drone)."""
+        if isinstance(self._source, UdpSource):
+            self._source.send(pkt)
+            return True
+        raise RuntimeError(
+            "Chưa kết nối live để gửi: lệnh điều khiển cần connect('udp') với drone "
+            "(PC cùng mạng 192.168.2.x). Đọc telemetry qua 'adb' không gửi được — "
+            "adb chỉ bắt gói chiều drone→app. Dùng build_* để lấy byte mà không gửi.")
+
     def build_request_iframe(self, request: bool = True) -> bytes:
         """Dựng gói xin keyframe cho phiên hiện tại (không gửi). Dùng được offline."""
         from .core.commands import request_iframe_packet

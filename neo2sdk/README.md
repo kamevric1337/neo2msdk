@@ -65,10 +65,16 @@ GPS, vệ tinh, cờ in_air/motor/gps…). Các trường 🟡 đã nối dây s
   `sdk.request_iframe()` gửi khi `connect("udp")`). Frame dựng ra **trùng y hệt từng byte**
   frame thật của DJI Fly (xem `tests/test_sdk.py::test_request_iframe_byte_exact`).
   Encoder đầy đủ: `transport.build_frame` / `build_outer` / `build_duml_app_packet`.
+- **Điều khiển gimbal** — ✅ **đã giải mã + dựng byte** (`sdk.gimbal_control.set_pitch(s)` với
+  `s∈[-1,1]`, hoặc `.send_speed(yaw,roll,pitch)` thô ±200, `.stop()`). Frame
+  `0x02→0x04 set 0x04 id 0x0c`, payload = yaw|roll|pitch (i16 LE) | 0x80 | 0x00; tốc độ mỗi
+  trục bão hòa ±200. Kiểm chứng bằng tcpdump khi kéo thanh gimbal (Ngày 9). GỬI cần
+  `connect('udp')` (PC cùng mạng drone); dựng byte thì offline cũng được.
 - **Điều khiển bay** — khung API đã sẵn (`sdk.flight_control.send_virtual_stick(throttle,
   yaw, pitch, roll)`, `request_control_authority()`), đúng hình dạng tìm trong APK (4 float
-  + auth). Nhưng **frame DUML chưa biết** → các hàm này báo "cần Frida". Lấy frame bằng
-  `tools/frida/duml_sniff.js` khi đẩy cần, rồi điền hàm dựng byte (như đã làm với keyframe).
+  + auth). Nhưng **frame DUML chưa biết** (phải bay mới bắt được) → các hàm này báo "cần
+  Frida". Phương pháp bắt lệnh: `tools/duml_tx_watch.py` (tcpdump, không tiêm app) — thao
+  tác MỘT trục chậm, frame nào payload biến thiên mượt = lệnh đó (như đã làm với gimbal).
 - **GPS, vận tốc ngang** — cần bay ngoài trời / bay ngang để kiểm chứng.
 
 ## Kiểm thử

@@ -58,3 +58,35 @@ class FlightControl:
     def request_iframe(self, request: bool = True):
         """Xin một keyframe (I-frame) ngay. Đã dựng byte chính xác; gửi khi connect('udp')."""
         return self._mgr.request_iframe(request)
+
+
+class GimbalControl:
+    """Điều khiển gimbal (tốc độ 3 trục). Gắn vào MSDKManager qua `sdk.gimbal_control`.
+
+    Lệnh đã giải mã trọn vẹn và dựng byte chính xác (0x02→0x04 set 0x04 id 0x0c,
+    xem core.commands.gimbal_speed_frame). GỬI cần kết nối live tới drone
+    (`connect('udp')`, PC ở cùng mạng drone); dựng byte thì offline cũng được.
+    """
+
+    def __init__(self, manager):
+        self._mgr = manager
+
+    def build_speed(self, yaw: int = 0, roll: int = 0, pitch: int = 0) -> bytes:
+        """Dựng gói lệnh tốc độ gimbal cho phiên hiện tại (không gửi). Giá trị THÔ ±200."""
+        from .commands import gimbal_speed_packet
+        self._mgr._seq = (self._mgr._seq + 1) & 0xFFFF
+        return gimbal_speed_packet(self._mgr.session_id, yaw, roll, pitch, seq=self._mgr._seq)
+
+    def send_speed(self, yaw: int = 0, roll: int = 0, pitch: int = 0):
+        """Dựng + GỬI lệnh tốc độ gimbal THÔ (±200). Cần connect('udp')."""
+        return self._mgr._send(self.build_speed(yaw, roll, pitch))
+
+    def set_pitch(self, speed: float):
+        """Đặt tốc độ pitch chuẩn hóa [-1, 1] (dương = ngẩng lên). Cần connect('udp')."""
+        from .commands import GIMBAL_SPEED_MAX
+        s = max(-1.0, min(1.0, speed))
+        return self.send_speed(pitch=round(s * GIMBAL_SPEED_MAX))
+
+    def stop(self):
+        """Dừng gimbal (tốc độ 0 mọi trục)."""
+        return self.send_speed(0, 0, 0)

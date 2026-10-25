@@ -179,8 +179,23 @@ FlightStatus(flyc_state, in_air, on_ground, motors_on,
 
 `JoystickConfig(throttle, yaw, pitch, roll)` — `.clamped()` kẹp về [-1,1].
 
-> 🔜 = khung sẵn, **thiếu frame DUML** của lệnh. Lấy bằng `tools/frida/duml_sniff.js` khi đẩy cần,
-> rồi điền hàm dựng byte trong `core/control.py` (mẫu: `request_iframe_frame` trong `core/commands.py`).
+> 🔜 = khung sẵn, **thiếu frame DUML** của lệnh BAY (phải bay mới bắt được). Lấy bằng
+> `tools/duml_tx_watch.py` (tcpdump, không tiêm app — DJI Fly có chống debug nên Frida bị app tự kill)
+> khi đẩy cần, rồi điền hàm dựng byte trong `core/commands.py` (mẫu: `gimbal_speed_frame`).
+
+### GimbalControl — `sdk.gimbal_control`
+
+Điều khiển tốc độ gimbal. Lệnh đã **giải mã + dựng byte chính xác** (frame `0x02→0x04 set 0x04 id 0x0c`).
+
+| Phương thức | TT | Ghi chú |
+|---|:---:|---|
+| `set_pitch(s)` | ✅ | pitch chuẩn hóa `s∈[-1,1]` (dương=ngẩng lên); gửi khi live |
+| `send_speed(yaw, roll, pitch)` | ✅ | tốc độ THÔ mỗi trục, kẹp ±200; gửi khi live |
+| `stop()` | ✅ | tốc độ 0 mọi trục |
+| `build_speed(yaw, roll, pitch)` | ✅ | chỉ DỰNG gói (offline), không gửi |
+
+payload 8 byte = `yaw|roll|pitch` (i16 LE) `| 0x80 | 0x00`; hết cỡ ±200 (kiểm chứng Ngày 9).
+GỬI cần `connect('udp')` (PC cùng mạng drone 192.168.2.x); `build_speed` thì offline cũng được.
 
 ---
 
@@ -244,8 +259,13 @@ from neo2sdk.core.commands import request_iframe_frame, request_iframe_packet
 
 request_iframe_frame(seq=0, request=True) -> bytes     # khung DUML (trùng byte y hệt app)
 request_iframe_packet(session_id, seq=0, request=True) -> bytes   # gói UDP hoàn chỉnh
+
+from neo2sdk.core.commands import gimbal_speed_frame, gimbal_speed_packet
+gimbal_speed_frame(yaw=0, roll=0, pitch=0, seq=0) -> bytes             # khung DUML gimbal (±200)
+gimbal_speed_packet(session_id, yaw=0, roll=0, pitch=0, seq=0) -> bytes  # gói UDP hoàn chỉnh
 ```
-Đây là lệnh điều khiển DUY NHẤT đã giải mã trọn vẹn và dựng byte chính xác (xem test byte-exact).
+Hai lệnh điều khiển đã giải mã trọn vẹn và dựng byte chính xác: **xin keyframe** và **tốc độ
+gimbal** (đều có test khớp byte payload mẫu thật). Các lệnh bay khác chờ bắt khi bay.
 
 ---
 
