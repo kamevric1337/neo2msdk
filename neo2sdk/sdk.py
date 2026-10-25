@@ -43,6 +43,9 @@ class MSDKManager:
         """source: đường dẫn .pcap (offline) hoặc "udp" (live, cùng mạng drone)."""
         if source == "udp":
             self._source = UdpSource()
+        elif source == "adb":
+            from .transport.adb_source import AdbTcpdumpSource
+            self._source = AdbTcpdumpSource()   # live qua tcpdump trên điện thoại
         elif hasattr(source, "__iter__") and not isinstance(source, str):
             self._source = source          # nguồn tự cấp
         else:

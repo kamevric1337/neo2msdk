@@ -674,3 +674,10 @@ giá trị 0.1°C. Ví dụ cap_09: wifi 66°C, esc 63.5°C, nand 56.2°C, ddr 5
 baro 36.2°C, sens 39°C, e3/s2/rf/pd các nhóm. Đã thêm vào SDK: SystemKey.ComponentTemperatures.
 ĐÍNH CHÍNH: "baro" ở đây là NHIỆT ĐỘ cảm biến khí áp (không phải độ cao như nghĩ trước). Cũng
 xác nhận đơn vị nhiệt độ pin là 0.1°C (dải 40-66°C hợp lý cho linh kiện đang chạy).
+
+# Ngày 8 — ĐỌC LIVE thành công
+SDK đọc telemetry trực tiếp từ drone qua `AdbTcpdumpSource` (tcpdump trên điện thoại stream pcap
+về PC qua `adb exec-out`, parse tại chỗ). Vì PC không nằm trên đường điện thoại↔drone nên bắt ngay
+trên điện thoại. Kiểm chứng: pin 83% 8.117V, tư thế/gimbal/nhiệt độ linh kiện/trạng thái đều live,
+~800 cập nhật telemetry / 6s. `MSDKManager.connect("adb")` + `examples/live_read.py`. Mục tiêu
+Phase 1 "đọc telemetry không cần DJI Fly diễn giải" — ĐẠT (DJI Fly chạy để tạo luồng, SDK giải mã độc lập).
