@@ -71,3 +71,16 @@ def shoot_photo_frame(seq: int = 0, mode: int = 0x01) -> bytes:
 def shoot_photo_packet(session_id: int, seq: int = 0, mode: int = 0x01) -> bytes:
     """Gói UDP 9003 hoàn chỉnh để gửi lệnh chụp ảnh tới drone."""
     return build_duml_app_packet(shoot_photo_frame(seq, mode), session_id)
+
+
+def record_frame(seq: int = 0, start: bool = True) -> bytes:
+    """Khung DUML quay video: 0x02→0x01 set 0x02 id 0x02 (Camera / Start-Stop Record).
+
+    payload 1 byte = 0x01 bắt đầu quay / 0x00 dừng. Xem notes (Ngày 9).
+    """
+    return build_frame(APP, CAMERA, 0x02, 0x02, bytes([0x01 if start else 0x00]), seq=seq)
+
+
+def record_packet(session_id: int, seq: int = 0, start: bool = True) -> bytes:
+    """Gói UDP 9003 hoàn chỉnh để gửi lệnh bắt đầu/dừng quay tới drone."""
+    return build_duml_app_packet(record_frame(seq, start), session_id)

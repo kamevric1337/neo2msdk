@@ -210,6 +210,14 @@ def test_camera_control_build():
     assert raised, "shoot_photo phải báo cần connect('udp')"
 
 
+def test_record_frame():
+    from neo2sdk.core.commands import record_frame
+    fs = list(iter_frames(record_frame(start=True)))[0]
+    assert fs.key() == (0x02, 0x01, 0x02, 0x02) and fs.payload == b"\x01", fs.payload.hex()
+    ft = list(iter_frames(record_frame(start=False)))[0]
+    assert ft.payload == b"\x00", ft.payload.hex()
+
+
 def test_control_scaffold():
     from neo2sdk.core.control import JoystickConfig
     c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()

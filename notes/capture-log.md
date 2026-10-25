@@ -735,4 +735,16 @@ So tập key với baseline: ĐÚNG MỘT key mới, xuất hiện 1 lần đún
 Khớp chuẩn DJI DUML: cmd_set 0x02 = Camera, cmd_id 0x01 = Shoot Photo; dst 0x01 = module camera.
 Đã thêm: core/commands.py::shoot_photo_frame/packet, core/control.py::CameraControl
 (sdk.camera_control.shoot_photo()). Test 16/16 PASS (thêm test_shoot_photo_frame khớp payload,
-test_camera_control_build). CÒN THIẾU: quay video start/stop (cần chụp lần sau ở Video mode).
+test_camera_control_build).
+
+## Ngày 9 (tiếp) — lệnh QUAY VIDEO (start/stop)
+
+tcpdump khi bấm nút quay đỏ (Video mode). 2 key mới, đúng 2 thao tác:
+  0x02→0x01 set 0x02 id 0x02, payload 01 @16.2s = BẮT ĐẦU quay
+  0x02→0x01 set 0x02 id 0x02, payload 00 @23.2s = DỪNG quay
+(kèm 0x02→0x01 set 0x02 id 0x92 payload "01 00 00" @16.8s — thông báo trạng thái record, phụ).
+Khớp chuẩn DJI: cmd_set 0x02 Camera, cmd_id 0x02 Start/Stop Record. Các frame id 0xd8/0xff là
+chatter keepalive tới FC, bỏ qua.
+Đã thêm: record_frame/packet (core/commands.py), CameraControl.start_record()/stop_record().
+Test 17/17 PASS. Tổng lệnh điều khiển đã giải mã: keyframe, gimbal, chụp ảnh, quay video.
+CÒN THIẾU: recenter gimbal, đổi mode camera (photo↔video), và lệnh BAY (takeoff/virtual stick — cần bay).

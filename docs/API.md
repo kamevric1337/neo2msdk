@@ -202,9 +202,8 @@ GỬI cần `connect('udp')` (PC cùng mạng drone 192.168.2.x); `build_speed` 
 | Phương thức | TT | Ghi chú |
 |---|:---:|---|
 | `shoot_photo(mode=1)` | ✅ | chụp ảnh — `0x02→0x01 set 0x02 id 0x01`, payload `01`; gửi khi live |
-| `build_shoot_photo(mode=1)` | ✅ | chỉ DỰNG gói (offline) |
-
-Quay video (start/stop) chưa bắt — cần chụp lần sau (cùng cách tcpdump).
+| `start_record()` / `stop_record()` | ✅ | quay video — `set 0x02 id 0x02`, payload `01`/`00`; gửi khi live |
+| `build_shoot_photo(mode=1)` / `build_record(start)` | ✅ | chỉ DỰNG gói (offline) |
 
 ---
 
@@ -273,12 +272,14 @@ from neo2sdk.core.commands import gimbal_speed_frame, gimbal_speed_packet
 gimbal_speed_frame(yaw=0, roll=0, pitch=0, seq=0) -> bytes             # khung DUML gimbal (±200)
 gimbal_speed_packet(session_id, yaw=0, roll=0, pitch=0, seq=0) -> bytes  # gói UDP hoàn chỉnh
 
-from neo2sdk.core.commands import shoot_photo_frame, shoot_photo_packet
+from neo2sdk.core.commands import shoot_photo_frame, shoot_photo_packet, record_frame, record_packet
 shoot_photo_frame(seq=0, mode=0x01) -> bytes              # khung DUML chụp ảnh
 shoot_photo_packet(session_id, seq=0, mode=0x01) -> bytes # gói UDP hoàn chỉnh
+record_frame(seq=0, start=True) -> bytes                  # khung DUML quay (start/stop)
+record_packet(session_id, seq=0, start=True) -> bytes     # gói UDP hoàn chỉnh
 ```
-Ba lệnh điều khiển đã giải mã trọn vẹn và dựng byte chính xác: **xin keyframe**, **tốc độ
-gimbal**, **chụp ảnh** (đều có test khớp byte payload mẫu thật). Các lệnh bay chờ bắt khi bay.
+Bốn lệnh điều khiển đã giải mã trọn vẹn và dựng byte chính xác: **xin keyframe**, **tốc độ
+gimbal**, **chụp ảnh**, **quay video** (đều có test khớp byte payload mẫu thật). Lệnh bay chờ bắt khi bay.
 
 ---
 

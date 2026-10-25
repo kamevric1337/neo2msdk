@@ -110,3 +110,17 @@ class CameraControl:
     def shoot_photo(self, mode: int = 0x01):
         """Dựng + GỬI lệnh chụp ảnh. Cần connect('udp')."""
         return self._mgr._send(self.build_shoot_photo(mode))
+
+    def build_record(self, start: bool = True) -> bytes:
+        """Dựng gói bắt đầu/dừng quay cho phiên hiện tại (không gửi)."""
+        from .commands import record_packet
+        self._mgr._seq = (self._mgr._seq + 1) & 0xFFFF
+        return record_packet(self._mgr.session_id, seq=self._mgr._seq, start=start)
+
+    def start_record(self):
+        """Dựng + GỬI lệnh bắt đầu quay video. Cần connect('udp')."""
+        return self._mgr._send(self.build_record(start=True))
+
+    def stop_record(self):
+        """Dựng + GỬI lệnh dừng quay video. Cần connect('udp')."""
+        return self._mgr._send(self.build_record(start=False))
