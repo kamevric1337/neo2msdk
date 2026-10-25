@@ -715,3 +715,14 @@ LƯU Ý quan trọng: GỬI lệnh tới drone cần PC ở CÙNG MẠNG drone (
 Đường 'adb'/tcpdump chỉ ĐỌC được (bắt gói), KHÔNG gửi được. Chưa thử gửi lệnh gimbal thật.
 CÒN THIẾU: recenter gimbal (chưa tách được frame riêng), và toàn bộ lệnh BAY (takeoff/virtual
 stick — phải bay mới bắt được bằng cùng phương pháp tcpdump).
+
+## Ngày 9 (tiếp) — kiểm chứng GPS live (không bay)
+
+Drone trong nhà: tcpdump qua adb, đọc OSD General (0x03 id 0x43). Kết quả live:
+  - SatelliteCount = 5-6 → ✅ decode đúng (hợp lý trong nhà).
+  - ctrl_state = 0x00805000 → bit gps_used (0x8000) = 0 → ✅ "chưa dùng GPS" (đúng, chưa đủ sat).
+  - lat/lon: byte [0:16] của payload TOÀN 0 → drone báo 0,0 vì CHƯA CÓ FIX (không phải lỗi offset;
+    dump thô xác nhận). Decode lon/lat (double radian, offset 0 và 8) đúng vị trí, sẽ ra toạ độ
+    thật khi drone đủ sat để fix (gần cửa sổ/ngoài trời).
+  - height i16 [16:18] = 0 → đang dưới đất, khớp.
+Lưu ý: "GPS sai số 20-30m" user thấy là GPS của ĐIỆN THOẠI, không phải của drone Neo 2.

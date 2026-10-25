@@ -52,12 +52,15 @@ Ví dụ đầy đủ: `examples/read_telemetry.py`, `examples/save_video.py`.
 | `FlightControllerKey.FlightState` | int | cap_09 |
 | `FlightControllerKey.Status` | FlightStatus (cờ bay) | cap_09 (in_air/motors) |
 | `FlightControllerKey.IsFlying` / `.AreMotorsOn` | bool | cap_09 |
-| `FlightControllerKey.Location` / `.SatelliteCount` | GpsLocation / int | 🟡 cần bay ngoài trời |
+| `FlightControllerKey.SatelliteCount` | int | ✅ verify live (5-6 sat trong nhà) |
+| `FlightControllerKey.Location` | GpsLocation | ✅ đúng offset; = 0,0 tới khi drone có fix GPS |
 | `FlightControllerKey.UltrasonicHeight` | float (m) | 🟡 |
 | `GimbalKey.Attitude` | GimbalAttitude(pitch,quat) | cap_06/07 |
 
 Toàn bộ frame OSD General được giải mã theo **layout chuẩn DJI** (pitch/roll/yaw, độ cao, vận tốc,
-GPS, vệ tinh, cờ in_air/motor/gps…). Các trường 🟡 đã nối dây sẵn, sẽ có giá trị khi bay ngoài trời.
+GPS, vệ tinh, cờ in_air/motor/gps…). GPS đã kiểm chứng live trong nhà (số vệ tinh + cờ gps_used
+đúng; lat/lon = 0,0 vì drone chưa đủ sat để có fix — sẽ ra toạ độ thật khi có fix). Các trường 🟡
+còn lại đã nối dây sẵn, sẽ có giá trị khi đủ điều kiện.
 
 ## Đường ghi (điều khiển)
 
