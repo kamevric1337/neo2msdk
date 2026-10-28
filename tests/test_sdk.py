@@ -218,6 +218,22 @@ def test_record_frame():
     assert ft.payload == b"\x00", ft.payload.hex()
 
 
+def test_tunnel_wrap_byte_exact():
+    # Lệnh app->drone thật đi trong tunnel 0x3b->0xe9 set 0x51 id 0x01. Dựng lại phải
+    # TRÙNG BYTE khung tunnel chụp ảnh quan sát được (Ngày 9, seq tunnel=0x3893).
+    from neo2sdk.core.commands import tunnel_wrap
+    inner = build_frame(0x02, 0x01, 0x02, 0x01, b"\x01", seq=0xaec9, ack=2)  # cfg=0x40
+    assert inner == bytes.fromhex("550e04660201c9ae400201011cc7"), inner.hex()
+    real_tun = bytes.fromhex(
+        "55310453" "3be9" "9338" "00" "51" "01"
+        "550e04660201c9ae400201011cc7"
+        "a100ca550293380000ffffffff018200000000000000" "7419")
+    assert tunnel_wrap(inner, 0x3893) == real_tun, tunnel_wrap(inner, 0x3893).hex()
+    # và SDK parse ngược ra đúng lệnh lồng bên trong
+    frames = {f.key(): f for f in iter_frames(tunnel_wrap(inner, 0x3893))}
+    assert (0x3b, 0xe9, 0x51, 0x01) in frames and (0x02, 0x01, 0x02, 0x01) in frames
+
+
 def test_control_scaffold():
     from neo2sdk.core.control import JoystickConfig
     c = JoystickConfig(throttle=2.0, yaw=-3.0).clamped()

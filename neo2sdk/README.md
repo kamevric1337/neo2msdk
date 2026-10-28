@@ -64,6 +64,14 @@ còn lại đã nối dây sẵn, sẽ có giá trị khi đủ điều kiện.
 
 ## Đường ghi (điều khiển)
 
+> ⚠️ **GỬI lệnh chưa chạy được.** Các lệnh dưới đây đã **giải mã + dựng đúng khung DUML bên
+> trong** (verify byte-exact với gói thật), NHƯNG lệnh app→drone thật đi trong **tunnel tin cậy
+> 0x51** (`0x3b→0xe9`) với **seq tăng đều do app sở hữu** + trạng thái ARQ/ACK ở subheader & đuôi
+> (xem `core.commands.tunnel_wrap`, kiểm chứng Ngày 9). Chèn một gói lẻ song song DJI Fly bị drone
+> bỏ qua (đã thử: gửi frame trần → không chụp). Điều khiển thật đáng tin cần SDK **tự sở hữu phiên**
+> (handshake + tự quản tunnel), KHÔNG chạy DJI Fly cùng lúc — đây là mốc lớn kế tiếp. Vì vậy
+> `connect('udp')` + `_send()` mới chỉ đẩy byte ra, chưa điều khiển được drone.
+
 - **Xin keyframe** — ✅ **dựng byte chính xác** (`sdk.build_request_iframe()` offline;
   `sdk.request_iframe()` gửi khi `connect("udp")`). Frame dựng ra **trùng y hệt từng byte**
   frame thật của DJI Fly (xem `tests/test_sdk.py::test_request_iframe_byte_exact`).

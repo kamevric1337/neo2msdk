@@ -277,9 +277,17 @@ shoot_photo_frame(seq=0, mode=0x01) -> bytes              # khung DUML chụp �
 shoot_photo_packet(session_id, seq=0, mode=0x01) -> bytes # gói UDP hoàn chỉnh
 record_frame(seq=0, start=True) -> bytes                  # khung DUML quay (start/stop)
 record_packet(session_id, seq=0, start=True) -> bytes     # gói UDP hoàn chỉnh
+
+from neo2sdk.core.commands import tunnel_wrap
+tunnel_wrap(inner_frame, tunnel_seq) -> bytes   # bọc khung lệnh vào tunnel 0x3b->0xe9 set 0x51 id 0x01
 ```
-Bốn lệnh điều khiển đã giải mã trọn vẹn và dựng byte chính xác: **xin keyframe**, **tốc độ
-gimbal**, **chụp ảnh**, **quay video** (đều có test khớp byte payload mẫu thật). Lệnh bay chờ bắt khi bay.
+Bốn lệnh điều khiển đã giải mã trọn vẹn và dựng byte chính xác (khung DUML bên trong): **xin
+keyframe**, **tốc độ gimbal**, **chụp ảnh**, **quay video** — đều có test khớp byte mẫu thật.
+
+> ⚠️ **GỬI lệnh tới drone CHƯA chạy.** Lệnh app→drone thật đi trong **tunnel tin cậy 0x51**
+> (`0x3b→0xe9`, xem `tunnel_wrap`) với seq tăng đều do app sở hữu + ARQ. Gửi một gói lẻ (kể cả đã
+> bọc tunnel) song song DJI Fly bị drone bỏ qua do đua seq. Điều khiển thật cần SDK tự sở hữu
+> phiên (handshake + tự quản tunnel) — mốc kế tiếp. Lệnh bay chờ bắt khi bay.
 
 ---
 

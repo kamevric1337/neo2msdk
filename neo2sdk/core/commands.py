@@ -20,6 +20,18 @@ VIDEO_MCU = 0x09   # "HD transmission MCU air side"
 GIMBAL = 0x04      # module gimbal
 CAMERA = 0x01      # module camera (nhận cmd_set 0x02)
 
+# Tầng tunnel tin cậy cho lệnh app→drone (Ngày 9, kiểm chứng trên gói chụp thật):
+# mọi lệnh thật được BỌC trong khung 0x3b→0xe9 set 0x51 id 0x01, payload = khung lệnh
+# bên trong + 22 byte đuôi ARQ (seq lồng + ff ff ff ff + hằng chưa rõ hết). Tunnel seq
+# là bộ đếm tăng đều do phía gửi sở hữu. Gửi thật đáng tin cần TỰ QUẢN tunnel này
+# (SDK sở hữu phiên), không chèn gói lẻ song song DJI Fly. Xem notes/capture-log.md.
+TUNNEL_LINK_SRC = 0x3b
+TUNNEL_LINK_DST = 0xe9
+# Đuôi ARQ 22 byte: [0:5] hằng quan sát, [5:7] = tunnel seq (LE), [7:] hằng quan sát.
+# Các trường này chưa giải mã hết (nhiều khả năng là ack/bitmap của ARQ).
+_ARQ_HEAD = bytes.fromhex("a100ca5502")
+_ARQ_TAIL = bytes.fromhex("0000ffffffff018200000000000000")
+
 # Lệnh gimbal: giá trị tốc độ mỗi trục bão hòa ở ±200 (quan sát khi kéo thanh hết cỡ).
 GIMBAL_SPEED_MAX = 200
 GIMBAL_CTRL_FLAG = 0x80   # byte[6], cố định trên mọi mẫu (cờ bật điều khiển)
@@ -84,3 +96,16 @@ def record_frame(seq: int = 0, start: bool = True) -> bytes:
 def record_packet(session_id: int, seq: int = 0, start: bool = True) -> bytes:
     """Gói UDP 9003 hoàn chỉnh để gửi lệnh bắt đầu/dừng quay tới drone."""
     return build_duml_app_packet(record_frame(seq, start), session_id)
+
+
+def tunnel_wrap(inner_frame: bytes, tunnel_seq: int) -> bytes:
+    """Bọc một khung lệnh DUML vào tunnel tin cậy 0x3b→0xe9 set 0x51 id 0x01.
+
+    Đây là CÁCH drone thực sự nhận lệnh app→drone (kiểm chứng trên gói chụp thật,
+    Ngày 9 — dựng lại trùng byte y hệt). `tunnel_seq` là bộ đếm tunnel (16-bit) tăng
+    đều; để điều khiển thật đáng tin cần TỰ QUẢN seq/ack của tunnel (SDK sở hữu phiên),
+    nên hàm này chủ yếu để nắm định dạng + test, chưa đủ để chèn lệnh khi DJI Fly đang chạy.
+    """
+    arq = _ARQ_HEAD + (tunnel_seq & 0xFFFF).to_bytes(2, "little") + _ARQ_TAIL
+    return build_frame(TUNNEL_LINK_SRC, TUNNEL_LINK_DST, 0x51, 0x01,
+                       inner_frame + arq, seq=tunnel_seq)

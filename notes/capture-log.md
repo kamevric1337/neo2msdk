@@ -748,3 +748,30 @@ chatter keepalive tới FC, bỏ qua.
 Đã thêm: record_frame/packet (core/commands.py), CameraControl.start_record()/stop_record().
 Test 17/17 PASS. Tổng lệnh điều khiển đã giải mã: keyframe, gimbal, chụp ảnh, quay video.
 CÒN THIẾU: recenter gimbal, đổi mode camera (photo↔video), và lệnh BAY (takeoff/virtual stick — cần bay).
+
+## Ngày 9 (tiếp) — THỬ GỬI LỆNH THẬT: phát hiện tầng tunnel tin cậy app→drone
+
+Mục tiêu: xác nhận đường ghi hoạt động bằng cách gửi lệnh chụp thật tới drone.
+
+Cơ chế gửi từ điện thoại (PC không ở mạng drone): `tools/adb_send.py` đọc session_id tươi,
+dựng gói trên PC, base64 → đẩy sang điện thoại, gửi UDP tới 192.168.2.1:9003 bằng `toybox nc`.
+Phải vượt policy-routing của Android: traffic không gắn mạng rơi vào luật `32000: unreachable`.
+Fix: tạm thêm `ip rule add to 192.168.2.1 lookup wlan0 pref 14000`, gửi, rồi xóa luật. nc cần
+`-q 1` (không có thì toybox nc treo chờ UDP reply). Gửi được (RC=0) nhưng **drone KHÔNG chụp**.
+
+Bắt gói chụp THẬT của app rồi so sánh → ra nguyên nhân (và một phát hiện lớn về giao thức):
+  Lệnh app→drone KHÔNG đi dưới dạng frame trần. Nó được BỌC trong TUNNEL tin cậy:
+    outer(16) + subheader(16, ĐỘNG - không phải hằng 78 5d như tưởng) + len(2) +
+    khung 0x3b→0xe9 set 0x51 id 0x01 {  payload = [khung lệnh bên trong] + [22 byte đuôi ARQ] }
+  - Khung lệnh bên trong: 0x02→0x01 set 0x02 id 0x01 payload 01, **cfg=0x40 (ack=2)** (không phải 0).
+  - Tunnel seq tăng đều 16-bit (0x3893, 0x38b6, 0x38b7...) do PHÍA GỬI (DJI Fly) sở hữu.
+  - Đuôi 22 byte: `a1 00 ca 55 02` + seq(LE) + `00 00 ff ff ff ff 01 82 00..00` — ARQ (ack/bitmap),
+    chưa giải mã hết.
+  - subheader [16:32] = `a8 dc a8 dc 00 00 00 00 60 dc 60 dc 00 00 00 00` (seq/ack động của tunnel).
+  Dựng lại khung tunnel chụp TRÙNG BYTE Y HỆT (test_tunnel_wrap_byte_exact) → hiểu đúng định dạng.
+
+KẾT LUẬN: frame trần bị drone bỏ qua vì không nằm trong tunnel. Chèn 1 gói lẻ song song DJI Fly
+cũng KHÔNG đáng tin vì đua seq với app (reliable transport dedupe/cửa sổ). Muốn điều khiển thật:
+SDK phải TỰ SỞ HỮU PHIÊN — làm handshake (kênh 0x00) + tự quản tunnel seq/ack, KHÔNG chạy DJI Fly
+cùng lúc. Đây là mốc lớn kế tiếp (cần drone để lặp thử). Đã thêm `core.commands.tunnel_wrap` +
+hằng TUNNEL_LINK_SRC/DST, _ARQ_HEAD/_ARQ_TAIL (nắm định dạng). Test 18/18.
