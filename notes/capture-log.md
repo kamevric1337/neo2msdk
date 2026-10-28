@@ -775,3 +775,23 @@ cũng KHÔNG đáng tin vì đua seq với app (reliable transport dedupe/cửa 
 SDK phải TỰ SỞ HỮU PHIÊN — làm handshake (kênh 0x00) + tự quản tunnel seq/ack, KHÔNG chạy DJI Fly
 cùng lúc. Đây là mốc lớn kế tiếp (cần drone để lặp thử). Đã thêm `core.commands.tunnel_wrap` +
 hằng TUNNEL_LINK_SRC/DST, _ARQ_HEAD/_ARQ_TAIL (nắm định dạng). Test 18/18.
+
+## Ngày 9 (tiếp) — sensor 0x92: tiến độ giải mã (DỞ DANG, dừng vì drone overheat)
+
+Stream chính: 0x92→0x02 set 0x23 id 0xb2, 43 byte, ~50Hz. Bắt 2 lần (drone YÊN vs NGHIÊNG tay,
+motor tắt) rồi so biến thiên từng offset (tools/sensor92.py). Kết quả khoanh vùng:
+  - [0:4] u32 = timestamp mili-giây (bước +20/frame ≈ 50Hz).
+  - offset 12, 14, 16 (i16 LE): YÊN thì gần như cố định, NGHIÊNG thì vọt mạnh (biên ~14000-65000)
+    -> rất giống BỘ 3 TRỤC ACCEL (gia tốc kế). (off12 yên≈16128/16640, off14≈69, off16≈10240.)
+  - offset 18, 20 (i16 LE): cũng đổi theo chuyển động, biên vừa (~2800-5600) -> ứng viên GYRO
+    hoặc trục còn lại.
+  - offset 22 & 38: biên rất lớn CẢ khi yên (byte cao 23/39 nhảy liên tục) -> nhiễu/field khác,
+    CHƯA phải kênh sensor sạch; cần xem lại căn chỉnh (có thể field lệch, không chẵn-byte).
+  - byte 9 (dist, 0..768) và byte 10 (0..3): đếm phụ/cờ, chưa rõ.
+
+CÒN LẠI để lần sau (cần drone, KHÔNG bay): nghiêng TỪNG trục riêng (pitch, rồi roll, rồi yaw),
+mỗi trục vài giây + nghỉ giữa các trục -> gán chính xác offset↔trục (accel XYZ, gyro XYZ) và tính
+hệ số (LSB/g, LSB/°/s). Dữ liệu thô đã bắt: scratchpad s92_still.bin / s92_move2.bin (không commit).
+
+LƯU Ý VẬN HÀNH: drone để yên dưới đất + wifi/camera chạy lâu -> NÓNG (không có gió mát như khi bay).
+Phiên bắt sensor nên ngắn, và cho drone nghỉ giữa các lần.
